@@ -17,23 +17,27 @@ const UserschemaDefine = {
         type: Number,
         require: true
     },
-    paycontent: { //收款内容  1定金 2 中款 3 尾款
+    content: { //收款内容  1定金 2 中款 3 尾款
         type: Number,
         require: true
     },
-    paycontentZn: { //收款内容  1定金 2 中款 3 尾款
+    contentZn: { //收款内容  1定金 2 中款 3 尾款
         type: String,
         require: true
     },
-    payway: { //收款方式
+    way: { //收款方式
         type: Number, //1支付宝 2 微信 3 银行卡
         require: true
     },
-    payaccount: {
+    account: {
         type: Number, //收款账号
         require: true
     },
-    payshot: {
+    money: {
+        type: Number, //收款金额
+        require: true
+    },
+    shot: {
         type: String, //收款截图
         require: true,
         default: ''
