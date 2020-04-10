@@ -25,17 +25,35 @@ const UserschemaDefine = {
         default: 0
     },
     creator: {
-        type: Number //订单创建人
+        type: Number, //订单创建人
+        default: null
+    },
+    distributor: {
+        type: Number, //订单分配人
+        default: null
+    },
+    executor: {
+        type: Number, //执行人
+        default: null
     },
     remark: String, //备注
     createTime: { //创建订单时间
         type: Number,
         default: Date.now
     },
+    allocTime: { //订单分配时间
+        type: Number,
+        default: null
+    },
     upgradeTime: { //升级订单时间
         type: Number,
         default: null
+    },
+    doneTime: { //订单完成时间
+        type: Number,
+        default: null
     }
+
 };
 
 const UserSchema = new MongooseSchema(UserschemaDefine);

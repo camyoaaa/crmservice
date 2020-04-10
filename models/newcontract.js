@@ -20,6 +20,10 @@ const UserschemaDefine = {
         type: Number,
         require: true
     },
+    reviewer: { //审核人
+        type: Number,
+        require: true
+    },
     createTime: { //合同录入时间
         type: Number,
         require: true,
@@ -34,9 +38,11 @@ const UserschemaDefine = {
         default: ''
     },
     way: Number, //签约方式  1 法大大店子合同 2现场签约
-    wayZn: String, //
-    status: Number, //合同状态,审核中,经理未通过,经理通过,法务未通过,法务已通过
-    remark: String
+    status: Number, //合同状态,审核中,经理未通过,经理通过,法务未通过,法务已通过  // 1审核中 2通过 3未通过
+    remark: {
+        type: String,
+        default: ''
+    }
 };
 
 const UserSchema = new MongooseSchema(UserschemaDefine);

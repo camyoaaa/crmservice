@@ -42,11 +42,9 @@ router.get("/list", async function (req, res, next) {
         ...filters
     } = req.query;
     try {
-        let filteredConditions = generateConditions(filters, fuzzies);
-        if (filteredConditions.cid) {
-            filteredConditions.cid = Number(filteredConditions.cid)
-        }
-        console.log('filteredConditions********************', filteredConditions);
+        let filteredConditions = generateConditions(filters, fuzzies, {
+            toNumber: ['cid', 'oid']
+        });
         const [totalCount, list] = await Promise.all([
             folllowModel.countDocuments(filteredConditions),
             folllowModel.aggregate([{

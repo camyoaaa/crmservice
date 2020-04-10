@@ -202,6 +202,40 @@ router.get("/info", async function (req, res, next) {
         });
     }
 });
+
+router.get('/workdata', async function (req, res, next) {
+    try {
+        let queryResult = await userModel.aggregate([{
+                $lookup: {
+                    from: 'Deparments',
+                    localField: 'department',
+                    foreignField: 'did',
+                    as: 'departmentInfo'
+                }
+            },
+            {
+                $unwind: '$departmentInfo'
+            },
+            {
+                $lookup: {
+                    from: 'Posts',
+                    localField: 'post',
+                    foreignField: 'pid',
+                    as: 'postInfo'
+                }
+            },
+            {
+                $unwind: '$postInfo'
+            }
+        ]);
+    } catch (error) {
+
+    }
+});
+
+
+
+
 router.put("/modinfo", async function (req, res, next) {
     try {
         let {

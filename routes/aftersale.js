@@ -19,17 +19,71 @@ const {
 router.get("/", async function (req, res, next) {
 
     try {
-        let aftersaleInfo = await aftersaleModel.findOne({
-            cid: Number(req.query.cid)
-        }).select({
-            '_id': 0,
-            "_v": 0
-        });
-        if (aftersaleInfo) {
+        let aftersaleInfo1 = await aftersaleModel.aggregate([{
+                $match: {
+                    orderid: Number(req.query.oid)
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Customs',
+                    localField: 'cid',
+                    foreignField: 'cid',
+                    as: 'customInfo'
+                }
+            },
+            {
+                $unwind: "$customInfo"
+            },
+            {
+                $lookup: {
+                    from: 'Neworders',
+                    localField: 'orderid',
+                    foreignField: 'oid',
+                    as: 'orderInfo'
+                }
+            },
+            {
+                $unwind: "$orderInfo"
+            },
+            {
+                $lookup: {
+                    from: 'Meals',
+                    localField: 'orderInfo.mid',
+                    foreignField: 'mid',
+                    as: 'mealInfo'
+                }
+            },
+            {
+                $unwind: '$mealInfo'
+            },
+            {
+                $lookup: {
+                    from: 'Payreceipts',
+                    localField: 'orderInfo.oid',
+                    foreignField: 'orderid',
+                    as: 'payreceiptList'
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    __v: 0
+                }
+            }
+        ]);
+        console.log('aftersaleInfo1', aftersaleInfo1);
+        // let aftersaleInfo = await aftersaleModel.findOne({
+        //     orderid: Number(req.query.oid)
+        // }).select({
+        //     '_id': 0,
+        //     "_v": 0
+        // });
+        if (aftersaleInfo1) {
             res.json({
                 status: 200,
                 msg: "查询成功",
-                data: aftersaleInfo
+                data: aftersaleInfo1[0]
             });
         } else {
             throw new Error();
@@ -181,13 +235,13 @@ router.post('/payshot', async function (req, res, next) {
 
 router.put("/update", async function (req, res, next) {
     let {
-        cid,
+        rid,
         ...payload
     } = req.body;
     payload.updateTime = Date.now();
     try {
         let updateSuccess = await aftersaleModel.updateOne({
-            cid
+            rid: Number(rid)
         }, {
             $set: payload
         }, {

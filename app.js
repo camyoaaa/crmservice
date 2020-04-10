@@ -27,6 +27,7 @@ var contractRouter = require("./routes/contract");
 var customRouter = require("./routes/custom");
 var followRecordRouter = require("./routes/followrecord");
 var aftersaleRouter = require("./routes/aftersale");
+var payreceiptRouter = require("./routes/payreceipt");
 
 
 var app = express();
@@ -67,6 +68,8 @@ app.use("/followRecord", followRecordRouter);
 app.use("/aftersale", aftersaleRouter);
 
 app.use("/custom", customRouter);
+app.use("/payreceipt", payreceiptRouter);
+
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

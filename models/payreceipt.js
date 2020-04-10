@@ -18,13 +18,10 @@ const UserschemaDefine = {
         require: true
     },
     content: { //收款内容  1定金 2 中款 3 尾款
-        type: Number,
-        require: true
-    },
-    contentZn: { //收款内容  1定金 2 中款 3 尾款
         type: String,
         require: true
     },
+
     way: { //收款方式
         type: Number, //1支付宝 2 微信 3 银行卡
         require: true
@@ -42,9 +39,17 @@ const UserschemaDefine = {
         require: true,
         default: ''
     },
-    review: {
+    status: {
         type: Number, //1待审核 2 审核通过
         default: 1
+    },
+    reviewer: { //审核人
+        type: Number,
+        default: null
+    },
+    reviewmark: { //审核备注
+        type: String,
+        default: ''
     },
     creator: { //单据创建人
         type: Number,

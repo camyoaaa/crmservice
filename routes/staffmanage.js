@@ -236,11 +236,11 @@ router.get("/filter", async function (req, res, next) {
             condition.post = pid
         }
     }
-    if (onduty) {
-        condition.status = StaffStatus.Working
-    }
+    // if (onduty == 'true') {
+    //     condition.status = StaffStatus.Working
+    // }
     try {
-        let result = await userModel.find({}).where(condition).sort('lastTaskTime');
+        let result = await userModel.find({}).where(condition).sort('status lastTaskTime');
         res.json({
             status: 200,
             result: {

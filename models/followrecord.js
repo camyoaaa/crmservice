@@ -9,6 +9,7 @@ const UserschemaDefine = {
         require: true
     },
     cid: Number, //客户id
+    oid: Number, //订单id
     uid: Number, //用户id
     createTime: {
         type: Number,

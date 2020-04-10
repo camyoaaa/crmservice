@@ -36,6 +36,56 @@ router.get("/", async function (req, res, next) {
     }
 });
 
+router.get('/detail', async function (req, res, next) {
+    try {
+        let customInfo = await customModel.aggregate([{
+                $match: {
+                    cid: Number(req.query.cid)
+                }
+            },
+            {
+                $lookup: {
+                    from: 'Customfroms',
+                    localField: 'from',
+                    foreignField: 'oid',
+                    as: 'fromInfo'
+                }
+            },
+            {
+                $unwind: '$fromInfo'
+            },
+            {
+                $lookup: {
+                    from: 'CustomStatus',
+                    localField: 'status',
+                    foreignField: 'sid',
+                    as: 'statusInfo'
+                }
+            },
+            {
+                $unwind: '$statusInfo'
+            },
+            {
+                $lookup: {
+                    from: 'Neworders',
+                    localField: 'cid',
+                    foreignField: 'cid',
+                    as: 'orderList'
+                }
+            }
+        ]);
+
+        res.json({
+            status: 200,
+            msg: '查询成功',
+            data: customInfo[0]
+        })
+    } catch (error) {
+
+    }
+});
+
+
 router.post("/add", async function (req, res, next) {
     try {
 
@@ -52,32 +102,9 @@ router.post("/add", async function (req, res, next) {
             receptTime: createMs,
             ...req.body
         });
-        // console.log('global.SocketIO.salesManager', global.SocketIO.salesManager);
         global.SocketIO.salesManager.emit('test', 'salesManager xxxxxxxxx', function (data) {
             console.log('global.SocketIO.salesManager test data', data);
         });
-
-        // let findUser = await userModel.findOne({
-        //     account: req.body.seller
-        // });
-        // let reset = createMs >= DataStatisticsTime && findUser.lastTaskTime < DataStatisticsTime; //如果本次分配时间是今天,且上次分配时间是昨天,那么重置该员工的分配数量
-
-        // let updatePipes = reset ? {
-        //     $set: {
-        //         lastTaskTime: createMs,
-        //         todayRecepted: 1
-        //     }
-        // } : {
-        //     $set: {
-        //         lastTaskTime: createMs
-        //     },
-        //     $inc: {
-        //         todayRecepted: 1
-        //     }
-        // };
-        // let updateUser = await userModel.updateOne({
-        //     account: req.body.seller
-        // }, updatePipes);
         if (addSuccess) {
             res.json({
                 status: 200,
@@ -89,7 +116,7 @@ router.post("/add", async function (req, res, next) {
     }
 });
 
-
+//分配销售
 router.post('/sellerAlloc', async function (req, res, next) {
     let DataStatisticsTime = getDataStatisticsTime(); //任务统计时间
     let createMs = Date.now(); //现在准备分配的时间
@@ -354,7 +381,7 @@ router.get('/sellerAllocList', async function (req, res, next) {
     }
 });
 
-
+//获取分配到自己的客户   --- 售前/销售人员
 router.get('/sellerCustomList', async function (req, res, next) {
     let {
         pageNo,
@@ -387,7 +414,6 @@ router.get('/sellerCustomList', async function (req, res, next) {
             ]
         }
     }
-    console.log('filteredConditions', filteredConditions);
     try {
         const [totalCount, list] = await Promise.all([
             customModel.countDocuments(filteredConditions),
@@ -445,10 +471,18 @@ router.get('/sellerCustomList', async function (req, res, next) {
                         foreignField: 'cid',
                         as: 'followList'
                     },
+                },
+                { //关联跟进记录
+                    $lookup: {
+                        from: 'Neworders',
+                        localField: 'cid',
+                        foreignField: 'cid',
+                        as: 'orderList'
+                    },
                 }
             ]).sort({
                 'status_doc.order': 1, //根据状态排序
-                _id: -1
+                _id: 1
             }).skip((Number(pageNo) - 1) * Number(pageSize))
             .limit(Number(pageSize))
         ]);
@@ -465,102 +499,6 @@ router.get('/sellerCustomList', async function (req, res, next) {
             }
         });
     } catch (error) {
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-
-router.get("/list", async function (req, res, next) {
-    let {
-        pageNo,
-        pageSize,
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-    try {
-        let filteredConditions = generateConditions(filters, fuzzies, {
-            toNumber: ['seller', 'aftersale', 'status', 'cid']
-        });
-        const [totalCount, list] = await Promise.all([
-            customModel.countDocuments(filteredConditions),
-            customModel.aggregate([{
-                    $match: filteredConditions
-                },
-                { //关联状态
-                    $lookup: {
-                        from: 'CustomStatus',
-                        localField: 'status',
-                        foreignField: 'sid',
-                        as: 'status_doc'
-                    },
-                },
-                {
-                    $unwind: '$status_doc'
-                },
-                { //关联销售人员
-                    $lookup: {
-                        from: 'Users',
-                        localField: 'seller',
-                        foreignField: 'account',
-                        as: 'seller_doc'
-                    },
-                },
-                { //关联客户来源
-                    $lookup: {
-                        from: 'Customfroms',
-                        localField: 'from',
-                        foreignField: 'oid',
-                        as: 'from_doc'
-                    },
-                },
-                {
-                    $unwind: '$from_doc'
-                },
-                { //关联跟进记录
-                    $lookup: {
-                        from: 'Followrecords',
-                        localField: 'cid',
-                        foreignField: 'cid',
-                        as: 'followList'
-                    },
-                }
-            ]).sort({
-                'status_doc.order': 1, //根据状态排序
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        console.log(totalCount, list);
-        if (true) {
-            //totalCount && Array.isArray(list) && list.length > 0
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
-                }
-            });
-        }
-
-    } catch (error) {
-        console.log(error);
         res.json({
             status: 500,
             message: "获取失败",

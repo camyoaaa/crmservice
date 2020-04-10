@@ -23,6 +23,10 @@ const UserschemaDefine = {
     createTime: {
         type: Number,
         default: Date.now
+    },
+    creator: {
+        type: Number,
+        require: true
     }
 };
 
