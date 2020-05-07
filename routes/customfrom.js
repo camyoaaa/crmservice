@@ -17,10 +17,7 @@ router.get("/", function (req, res, next) {
 
 router.post("/add", async function (req, res, next) {
     try {
-        let addSuccess = await customfromModel.create({
-            ...req.body,
-            status: recordStatus.Enable
-        });
+        let addSuccess = await customfromModel.create(req.body);
         if (addSuccess) {
             res.json({
                 status: 200,
@@ -36,18 +33,11 @@ router.get("/list", async function (req, res, next) {
     let {
         pageNo,
         pageSize,
-        userid,
         fuzzies, //模糊查询字段数组
         ...filters
     } = req.query;
     try {
-        let filteredConditions = generateConditions({
-            ...filters,
-            status: {
-                $ne: recordStatus.Delete
-            }
-        }, fuzzies);
-        console.log('filteredConditions', filteredConditions);
+        let filteredConditions = generateConditions(filters, fuzzies);
         const [totalCount, list] = await Promise.all([
             customfromModel.countDocuments(filteredConditions),
             customfromModel
@@ -120,15 +110,11 @@ router.put("/update", async function (req, res, next) {
     }
 });
 
-//用户登出
+//删除客户来源
 router.delete("/delete", async function (req, res, next) {
     try {
-        let result = await customfromModel.updateOne({
+        let result = await customfromModel.deleteOne({
             oid: req.body.oid
-        }, {
-            $set: {
-                status: recordStatus.Delete
-            }
         });
         if (result) {
             res.json({

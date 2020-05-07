@@ -64,11 +64,7 @@ const UserschemaDefine = {
         type: Number,
         default: ''
     },
-    aftersaleManager: { //售后经理
-        type: Number,
-        default: ''
-    },
-    aftersale: { //售后员
+    lastSeller: { //上一销售员
         type: Number,
         default: ''
     },
@@ -77,18 +73,6 @@ const UserschemaDefine = {
         default: ''
     },
     receptTime: { //客户录入时间
-        type: Number,
-        default: ''
-    },
-    sellerAllocTime: { //客户售前分配时间
-        type: Number,
-        default: ''
-    },
-    salesAllocTime: { //客户售后分配时间
-        type: Number,
-        default: ''
-    },
-    dealTime: { //成交时间
         type: Number,
         default: ''
     },

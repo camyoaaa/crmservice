@@ -1,102 +1,17 @@
 var express = require("express");
 var router = express.Router();
-const address = require("address");
 
 var aftersaleModel = require("../models/aftersale");
-// 引入解析包
-var formidable = require("formidable");
-var fs = require("fs");
-let path = require("path");
-
-const {
-    recordStatus
-} = require('../config');
+var neworderModel = require("../models/neworder");
 const {
     generateConditions
 } = require("../tool");
 
 /* GET users listing. */
-router.get("/", async function (req, res, next) {
+router.get("/", async function (req, res, next) {});
 
-    try {
-        let aftersaleInfo1 = await aftersaleModel.aggregate([{
-                $match: {
-                    orderid: Number(req.query.oid)
-                }
-            },
-            {
-                $lookup: {
-                    from: 'Customs',
-                    localField: 'cid',
-                    foreignField: 'cid',
-                    as: 'customInfo'
-                }
-            },
-            {
-                $unwind: "$customInfo"
-            },
-            {
-                $lookup: {
-                    from: 'Neworders',
-                    localField: 'orderid',
-                    foreignField: 'oid',
-                    as: 'orderInfo'
-                }
-            },
-            {
-                $unwind: "$orderInfo"
-            },
-            {
-                $lookup: {
-                    from: 'Meals',
-                    localField: 'orderInfo.mid',
-                    foreignField: 'mid',
-                    as: 'mealInfo'
-                }
-            },
-            {
-                $unwind: '$mealInfo'
-            },
-            {
-                $lookup: {
-                    from: 'Payreceipts',
-                    localField: 'orderInfo.oid',
-                    foreignField: 'orderid',
-                    as: 'payreceiptList'
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    __v: 0
-                }
-            }
-        ]);
-        console.log('aftersaleInfo1', aftersaleInfo1);
-        // let aftersaleInfo = await aftersaleModel.findOne({
-        //     orderid: Number(req.query.oid)
-        // }).select({
-        //     '_id': 0,
-        //     "_v": 0
-        // });
-        if (aftersaleInfo1) {
-            res.json({
-                status: 200,
-                msg: "查询成功",
-                data: aftersaleInfo1[0]
-            });
-        } else {
-            throw new Error();
-        }
-    } catch (error) {
-        res.json({
-            status: 500,
-            msg: "查询失败",
-            data: {}
-        });
-    }
-});
 
+//添加一条售后记录
 router.post("/add", async function (req, res, next) {
     try {
         let addSuccess = await aftersaleModel.create(req.body);
@@ -112,70 +27,201 @@ router.post("/add", async function (req, res, next) {
     }
 });
 
+
+//获取售后记录列表
 router.get("/list", async function (req, res, next) {
     let {
-        pageNo,
-        pageSize,
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
+        pageNo = 1,
+            pageSize = 10,
+            startTime,
+            endTime,
+            url,
+            fuzzies, //模糊查询字段数组
+            ...filters
     } = req.query;
     try {
         let filteredConditions = generateConditions({
             ...filters
-        }, fuzzies);
-        filteredConditions.cid = Number(filteredConditions.cid);
-        console.log('filteredConditions**************************************', filteredConditions);
-        const [totalCount, list] = await Promise.all([
-            aftersaleModel.countDocuments(filteredConditions),
-
-            aftersaleModel.aggregate([{
-                    $lookup: {
-                        from: 'Meals',
-                        localField: 'mid',
-                        foreignField: 'mid',
-                        as: 'mealInfo'
+        }, fuzzies, {
+            toNumber: ['orderid', 'executor', 'cid', 'isOpen', 'teachStep', 'isEnd']
+        });
+        if (startTime && endTime) { //传入了时间
+            filteredConditions.$and = [{
+                    'createTime': {
+                        $gt: Number(startTime)
                     }
                 }, {
-                    $match: filteredConditions,
+                    'createTime': {
+                        $lt: Number(endTime)
+                    }
+                }
+
+            ]
+        }
+        if (url) {
+            filteredConditions.$or = [{
+                    pcshopUrl: new RegExp(url)
                 },
                 {
-                    $unwind: '$mealInfo'
+                    mbshopUrl: new RegExp(url)
                 }
-            ]).sort({
-                _id: -1
-            })
-            .skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-
-            // aftersaleModel
-            // .find(filteredConditions)
-            // .sort({
-            //     _id: -1
-            // })
-            // .skip((Number(pageNo) - 1) * Number(pageSize))
-            // .limit(Number(pageSize))
-            // .select({
-            //     __v: 0,
-            //     _id: 0
-            // })
-        ]);
-        if (Array.isArray(list)) {
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
-                }
-            });
+            ]
         }
+        console.log(filteredConditions);
+        const result = await neworderModel.aggregate([{ //关联售后记录
+                $lookup: {
+                    from: 'Aftersales',
+                    localField: 'oid',
+                    foreignField: 'orderid',
+                    as: 'aftersaleList'
+                }
+            },
+            {
+                $addFields: {
+                    aftersaleInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$aftersaleList', 0]
+                        }, {}]
+                    }
+                }
+            },
+            {
+                $replaceRoot: { //把售后信息提到第一层
+                    newRoot: {
+                        $mergeObjects: [{
+                            _id: "$_id",
+                            oid: '$oid',
+                            premids: '$premids',
+                            mid: '$mid',
+                            money: "$money",
+                            creator: '$creator',
+                            distributor: "$distributor",
+                            lastExecutor: '$lastExecutor',
+                            executor: '$executor',
+                            remark: '$remark',
+                            createTime: "$createTime",
+                            allocTime: "$allocTime",
+                            upgradeTime: '$upgradeTime',
+                            doneTime: "$doneTime"
+                        }, "$aftersaleInfo"]
+                    }
+                }
+            },
+            { //关联套餐信息
+                $lookup: {
+                    from: 'Meals',
+                    localField: 'mid',
+                    foreignField: 'mid',
+                    as: 'mealList'
+                }
+            },
+            {
+                $addFields: {
+                    mealInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$mealList', 0]
+                        }, {}]
+                    }
+                }
+            },
+            { //关联跟进记录
+                $lookup: {
+                    from: 'Followrecords',
+                    localField: 'oid',
+                    foreignField: 'oid',
+                    as: 'followList'
+                }
+            },
+            { //关联订单的客户信息
+                $lookup: {
+                    from: 'Customs',
+                    localField: 'cid',
+                    foreignField: 'cid',
+                    as: 'customList'
+                }
+            },
+            {
+                $addFields: {
+                    customInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$customList', 0]
+                        }, {}]
+                    }
+                }
+            },
+            { //关联订单的负责人信息
+                $lookup: {
+                    from: 'Users',
+                    localField: 'executor',
+                    foreignField: 'account',
+                    as: 'executorList'
+                }
+            },
+            {
+                $addFields: {
+                    executorInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$executorList', 0]
+                        }, {}]
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    executorName: {
+                        $ifNull: ['$executorInfo.name', '']
+                    }
+                }
+            },
+            { //关联订单的收款信息
+                $lookup: {
+                    from: 'Payreceipts',
+                    localField: 'oid',
+                    foreignField: 'orderid',
+                    as: 'payreceiptList'
+                }
+            },
+            {
+                $project: {
+                    customList: 0,
+                    mealList: 0,
+                    executorList: 0,
+                    executorInfo: 0
+                }
+            },
+            {
+                $match: filteredConditions
+            },
+            {
+                $facet: {
+                    count: [{
+                        $count: "count"
+                    }],
+                    page: [{
+                            $skip: (Number(pageNo) - 1) * Number(pageSize)
+                        },
+                        {
+                            $limit: Number(pageSize)
+                        }
+                    ]
+                }
+            }
+        ]);
+        console.log(result);
+        res.json({
+            status: 200,
+            message: "获取成功",
+            timestamp: Date.now(),
+            result: {
+                pageNo: Number(pageNo),
+                pageSize: Number(pageSize),
+                totalCount: result[0].count[0].count,
+                totalPage: Math.ceil(result[0].count[0].count / pageSize),
+                data: result[0].page
+            }
+        });
     } catch (error) {
-        console.log('error*********************************', error);
+        console.log(error)
         res.json({
             status: 500,
             message: "获取失败",
@@ -191,48 +237,7 @@ router.get("/list", async function (req, res, next) {
     }
 });
 
-router.post('/payshot', async function (req, res, next) {
-    let form = new formidable.IncomingForm();
-    // form.encoding = "utf-8"; // 编码
-    // 保留扩展名
-    // form.keepExtensions = true;
-    //文件存储路径 最后要注意加 '/' 否则会被存在public下
-    form.uploadDir = path.join(__dirname, "../public/images/payshot/");
-    let updateSucess = false;
-    form.parse(req, (err, fields, files) => {
-        console.log('fields*********************', fields);
-        if (err) {
-            return next(err);
-        }
-        let imgPath = files.file.path;
-        let imgName = files.file.name;
-        // 返回路径和文件名
-        try {
-            fs.rename(imgPath, `${imgPath}.png`, async function () {
-                let paths = imgPath.split("\\");
-                let publicpath = paths[paths.length - 1];
-
-                let finalpath = `http://${address.ip()}:3000/images/payshot/${publicpath}.png`;
-                let result = await aftersaleModel.updateOne({
-                    oid: Number(fields.orderid)
-                }, {
-                    $set: {
-                        payshot: finalpath
-                    }
-                });
-                updateSucess = result.nModified == 1;
-                res.json({
-                    status: updateSucess ? 200 : 500,
-                    data: updateSucess ? {
-                        name: imgName,
-                        path: finalpath
-                    } : {}
-                });
-            });
-        } catch (err) {}
-    });
-});
-
+//更新售后记录
 router.put("/update", async function (req, res, next) {
     let {
         rid,
@@ -262,31 +267,5 @@ router.put("/update", async function (req, res, next) {
         });
     }
 });
-
-//用户登出
-router.delete("/delete", async function (req, res, next) {
-    try {
-        let result = await aftersaleModel.updateOne({
-            mid: req.body.mid
-        }, {
-            $set: {
-                status: recordStatus.Delete
-            }
-        });
-        console.log(result, typeof req.body.account);
-        if (result) {
-            res.json({
-                status: 200,
-                msg: "更新成功"
-            });
-        }
-    } catch (error) {
-        res.json({
-            status: 400,
-            msg: error.message
-        });
-    }
-});
-
 
 module.exports = router;

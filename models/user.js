@@ -4,6 +4,10 @@ const CollectionName = "Users";
 const autoIncrement = require("mongoose-auto-increment");
 
 const address = require('address');
+const {
+    APP_HOST,
+    APP_PORT
+} = require('../systemConfig');
 const UserschemaDefine = {
     account: {
         //员工编号
@@ -18,33 +22,17 @@ const UserschemaDefine = {
         type: Array,
         default: ''
     },
-    workat: {
-        type: Number,
-        default: ''
-    }, //上班时间
-    offworkat: {
-        type: Number,
-        default: ''
-    }, //下班时间
     name: {
         type: String,
         require: true
     },
-    department: { //部门
+    role: { //员工角色
         type: Number,
-        default: ''
-    },
-    post: { //岗位
-        type: Number,
-        default: ''
-    },
-    isadmin: { //是否管理员 0//否 1是
-        type: Number,
-        default: ''
+        require: true
     },
     avatar: { //头像
         type: String,
-        default: `http://${address.ip()}:3000/images/avatar/avatar.png`
+        default: `http://${APP_HOST}:${APP_PORT}/images/avatar/avatar.png`
     },
     phone: {
         type: String,
@@ -87,7 +75,6 @@ const UserschemaDefine = {
         default: 0
     },
     rememberMe: { //记住用户 0否 1是
-
         type: Number,
         default: 0
     }

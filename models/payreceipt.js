@@ -40,7 +40,7 @@ const UserschemaDefine = {
         default: ''
     },
     status: {
-        type: Number, //1待审核 2 审核通过
+        type: Number, //1待审核 2 审核通过 3审核未通过
         default: 1
     },
     reviewer: { //审核人

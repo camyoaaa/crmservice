@@ -20,7 +20,7 @@ const UserschemaDefine = {
         type: Number,
         require: true
     },
-    amount: {
+    money: {
         type: Number, //订单金额
         default: 0
     },
@@ -30,6 +30,10 @@ const UserschemaDefine = {
     },
     distributor: {
         type: Number, //订单分配人
+        default: null
+    },
+    lastExecutor: { //上一执行人
+        type: Number,
         default: null
     },
     executor: {

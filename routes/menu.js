@@ -11,6 +11,7 @@ router.get("/", function (req, res, next) {
     res.send("respond with a resource");
 });
 
+//新增菜单
 router.post("/add", async function (req, res, next) {
     try {
         let addSuccess = await menuModel.create({
@@ -29,6 +30,7 @@ router.post("/add", async function (req, res, next) {
     }
 });
 
+//获取菜单树
 router.get("/tree", async function (req, res, next) {
     try {
         let rootid = await menuModel.findOne({
@@ -55,6 +57,7 @@ router.get("/tree", async function (req, res, next) {
     }
 });
 
+//更新菜单
 router.put("/update", async function (req, res, next) {
     const {
         mid,
@@ -82,7 +85,7 @@ router.put("/update", async function (req, res, next) {
     }
 });
 
-//用户登出
+//删除菜单(可批量)
 router.delete("/delete", async function (req, res, next) {
     try {
         console.log("****************", req.body.mids);

@@ -5,8 +5,7 @@ var userModel = require("../models/user");
 var postModel = require("../models/post");
 
 const {
-    StaffStatus,
-    StaffMatchs
+    appRoleList
 } = require('../config');
 
 const {
@@ -18,6 +17,8 @@ router.get("/", function (req, res, next) {
     res.send("respond with a resource");
 });
 
+
+//新增员工
 router.post("/add", async function (req, res, next) {
     try {
         let addSuccess = await userModel.create(req.body);
@@ -32,18 +33,31 @@ router.post("/add", async function (req, res, next) {
     }
 });
 
+//获取员工列表
 router.get("/list", async function (req, res, next) {
     let {
         pageNo,
         pageSize,
-        userid,
         contact,
         fuzzies, //模糊查询字段数组
+        sorterList,
         ...filters
     } = req.query;
+    let sortPipeLine = {};
+    (sorterList && sorterList.length > 0 ? sorterList : [{
+        "sortField": "_id",
+        "sortOrder": "asc"
+    }]).forEach((sort = {}) => {
+        console.log(sort);
+        sort = typeof sort === 'object' ? sort : JSON.parse(sort);
+        if (sort.sortField && sort.sortOrder) {
+            sortPipeLine[sort.sortField] = sort.sortOrder
+        }
+    });
+    console.log('sortPipeLine', sortPipeLine);
     try {
         let filteredConditions = generateConditions(filters, fuzzies, {
-            toNumber: ['department', 'post', 'account']
+            toNumber: ['role', 'status', 'account']
         });
 
         if (contact) { //如果传入联系方式
@@ -68,34 +82,7 @@ router.get("/list", async function (req, res, next) {
         }
         const [totalCount, list] = await Promise.all([
             userModel.countDocuments(filteredConditions),
-            userModel.aggregate([{
-                    $match: filteredConditions
-                },
-                {
-                    $lookup: {
-                        from: 'Departments',
-                        localField: 'department',
-                        foreignField: 'did',
-                        as: 'department_doc'
-                    }
-                },
-                {
-                    $unwind: '$department_doc'
-                },
-                {
-                    $lookup: {
-                        from: 'Posts',
-                        localField: 'post',
-                        foreignField: 'pid',
-                        as: 'post_doc'
-                    }
-                },
-                {
-                    $unwind: '$post_doc'
-                },
-            ]).sort({
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
+            userModel.find(filteredConditions).sort(sortPipeLine).skip((Number(pageNo) - 1) * Number(pageSize))
             .limit(Number(pageSize))
         ]);
         if (Array.isArray(list)) {
@@ -129,38 +116,15 @@ router.get("/list", async function (req, res, next) {
     }
 });
 
-router.put("/updateOne", async function (req, res, next) {
-    const {
-        account,
-        ...payload
-    } = req.body;
-    try {
-        let updateSuccess = await userModel.updateOne({
-            account
-        }, {
-            $set: payload
-        });
-
-        if (updateSuccess) {
-            res.json({
-                status: 200,
-                msg: "更新成功"
-            });
-        }
-    } catch (error) {
-        console.log(error);
-        res.json({
-            status: 500,
-            msg: "更新失败"
-        });
-    }
-});
-
-router.put("/updateMany", async function (req, res, next) {
+//更新员工(可批量)
+router.put("/update", async function (req, res, next) {
     const {
         accounts,
         ...payload
     } = req.body;
+
+
+
     try {
         let updateSuccess = await userModel.updateMany({
             account: {
@@ -185,10 +149,9 @@ router.put("/updateMany", async function (req, res, next) {
     }
 });
 
-//删除员工
+//删除员工(可批量)
 router.delete("/delete", async function (req, res, next) {
     try {
-        console.log('req.body.accounts', req.body.accounts);
         let result = await userModel.deleteMany({
             account: {
                 $in: req.body.accounts
@@ -197,7 +160,7 @@ router.delete("/delete", async function (req, res, next) {
         if (result) {
             res.json({
                 status: 200,
-                msg: "更新成功"
+                msg: "删除成功"
             });
         }
     } catch (error) {
@@ -205,6 +168,21 @@ router.delete("/delete", async function (req, res, next) {
             status: 400,
             msg: error.message
         });
+    }
+});
+
+//获取销售列表
+router.get('/seller', async (req, res) => {
+    try {
+        let result = userModel.find({}).where({
+            role: appRoleList.find(r => r.name === '销售员')
+        }).sort('status lastTaskTime').select({
+            _id: 0,
+            __v: 0
+        });
+        res.isuccess(result);
+    } catch (error) {
+        res.ierror('未查询要销售员列表')
     }
 });
 
@@ -236,9 +214,6 @@ router.get("/filter", async function (req, res, next) {
             condition.post = pid
         }
     }
-    // if (onduty == 'true') {
-    //     condition.status = StaffStatus.Working
-    // }
     try {
         let result = await userModel.find({}).where(condition).sort('status lastTaskTime');
         res.json({

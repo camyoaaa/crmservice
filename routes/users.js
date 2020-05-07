@@ -1,6 +1,5 @@
 var express = require("express");
 var router = express.Router();
-var moment = require("moment");
 const address = require("address");
 
 // 引入解析包
@@ -9,31 +8,164 @@ var fs = require("fs");
 let path = require("path");
 var userModel = require("../models/user");
 
+var permissionModel = require('../models/permission');
 const Jwt = require("../midwares/auth/jwt");
 
 const {
-    StaffStatus
+    staffStatusList
 } = require('../config');
-
-//剥离记录中敏感信息
-const filterUserInfo = (record, req) => {
-    const {
-        password,
-        transactionPassword,
-        __v,
-        _id,
-        ...usreInfo
-    } = record;
-    usreInfo.userid = _id;
-    usreInfo.lastLoginIP = usreInfo.lastLoginIP || getClientIP(req);
-    usreInfo.lastLoginTime = usreInfo.lastLoginTime || moment().format("YYYY-MM-DD HH:mm:ss");
-    usreInfo.hasTradeCode = !!transactionPassword;
-    return usreInfo;
-};
 
 const getClientIP = req => {
     return req.headers["x-real-ip"] ? req.headers["x-real-ip"] : req.ip.replace(/::ffff:/, "");
 };
+
+let arras = [
+    // {
+    //     belong: 'customManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'customManage',
+    //     label: '添加',
+    //     value: 'add'
+    // },
+    // {
+    //     belong: 'customManage',
+    //     label: '跟进',
+    //     value: 'follow'
+    // },
+    // {
+    //     belong: 'customManage',
+    //     label: '签单',
+    //     value: 'order'
+    // },
+    // {
+    //     belong: 'customManage',
+    //     label: '分配/转移',
+    //     value: 'alloc'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '分配/转移',
+    //     value: 'alloc'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '分配/转移',
+    //     value: 'alloc'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '分配/转移',
+    //     value: 'alloc'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '收款/退款',
+    //     value: 'receipt'
+    // },
+    // {
+    //     belong: 'orderManage',
+    //     label: '签订合同',
+    //     value: 'contract'
+    // },
+    // {
+    //     belong: 'receiptManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'receiptManage',
+    //     label: '审核',
+    //     value: 'review'
+    // },
+    // {
+    //     belong: 'receiptManage',
+    //     label: '更正',
+    //     value: 'modify'
+    // },
+    // {
+    //     belong: 'contractManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'contractManage',
+    //     label: '审核',
+    //     value: 'review'
+    // },
+    // {
+    //     belong: 'contractManage',
+    //     label: '更正',
+    //     value: 'modify'
+    // },
+    // {
+    //     belong: 'aftersaleManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'aftersaleManage',
+    //     label: '跟进',
+    //     value: 'follow'
+    // },
+    // {
+    //     belong: 'mealManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'mealManage',
+    //     label: '新增菜单',
+    //     value: 'add'
+    // },
+    // {
+    //     belong: 'mealManage',
+    //     label: '修改菜单',
+    //     value: 'modify'
+    // },
+    // {
+    //     belong: 'mealManage',
+    //     label: '删除菜单',
+    //     value: 'delete'
+    // },
+    // {
+    //     belong: 'staffManage',
+    //     label: '查询/查看',
+    //     value: 'search'
+    // },
+    // {
+    //     belong: 'staffManage',
+    //     label: '编辑员工',
+    //     value: 'modify'
+    // },
+    // {
+    //     belong: 'staffManage',
+    //     label: '删除员工',
+    //     value: 'delete'
+    // },
+    {
+        belong: 'orderManage',
+        label: '升级订单',
+        value: 'upgrade'
+    },
+];
+// permissionModel.create({
+//     belong: 'orderManage',
+//     label: '升级订单',
+//     value: 'upgrade'
+// }, function (doc) {
+//     console.log(doc, 'xxxxxxxxxxxxxxxxx');
+// });
+
+
+
 
 /* GET users listing. */
 router.get("/", function (req, res, next) {
@@ -68,26 +200,43 @@ router.post("/login", async function (req, res, next) {
             account,
             password
         };
+        console.log(condition);
 
+        let WorkingStatus = staffStatusList.find(s => s.name === '正在工作').id;
         let loginResult = await userModel.findOneAndUpdate(condition, {
             rememberMe,
-            status: StaffStatus.Working, //登录的时候设置员工为工作中
+            status: WorkingStatus, //登录的时候设置员工为工作中
             lastLoginTime: Date.now(),
             lastLoginIP: getClientIP(req)
-        });
-        if (loginResult && loginResult.id) {
-            let userid = loginResult._id.toString();
+        }).select('-__v');
+        let {
+            _id,
+            ...userInfo
+        } = loginResult._doc || {}
+        if (userInfo.account) {
+            let userid = userInfo.account;
             let userToken = new Jwt(userid).generateToken(rememberMe ? 60 * 60 * 24 * 7 : undefined); //如果用户选择了记住账号密码,token有效期7天,否则1天
             res.header("Authorization", userToken);
+
+            res.systemSocket().sendMessage({
+                broadcast: true,
+                socketBody: {
+                    message: '系统通知',
+                    description: `【${userInfo.name}】已上线`
+                }
+            });
+
             res.json({
                 status: 200,
                 msg: "登陆成功",
                 user: {
-                    ...filterUserInfo(loginResult._doc, req),
-                    status: StaffStatus.Working
+                    userid,
+                    ...userInfo,
+                    status: WorkingStatus
                 }
             });
         } else {
+            console.log();
             throw new Error("error");
         }
     } catch (error) {
@@ -105,12 +254,24 @@ router.post("/logout", async function (req, res, next) {
         account
     } = req.body;
     try {
-        let user = await userModel.findOneAndUpdate({
+        let OffworkingStatus = staffStatusList.find(s => s.name === '暂停业务').id;
+        let logoutresult = await userModel.findOneAndUpdate({
             account
         }, {
-            status: StaffStatus.Offwork
+            status: OffworkingStatus
         });
-        if (user) {
+        let {
+            _id,
+            ...userInfo
+        } = logoutresult._doc || {}
+        if (_id) {
+            res.systemSocket().sendMessage({
+                broadcast: true,
+                socketBody: {
+                    message: '系统通知',
+                    description: `【${userInfo.name}】已下线`
+                }
+            });
             res.json({
                 status: 200,
                 msg: "注销成功",
@@ -127,18 +288,20 @@ router.post("/logout", async function (req, res, next) {
     }
 });
 
+//上传用户头像
 router.post("/avatar", async function (req, res, next) {
 
     let {
         avatar
     } = await userModel.findOne({
-        _id: req.userid
+        account: req.userid
     });
     if (avatar) {
         let paths = avatar.split('/');
         let pngname = paths[paths.length - 1];
 
         if (pngname != 'avatar.png') { ////如果用户已经有头像了,且不是默认头像,则删除之前的头像图片
+            //删除文件
             fs.unlink(path.join(__dirname, `../public/images/avatar/${pngname}`), function () {
                 console.log(`删除文件${pngname}成功`);
             });
@@ -146,27 +309,32 @@ router.post("/avatar", async function (req, res, next) {
     }
 
     let form = new formidable.IncomingForm();
-    // form.encoding = "utf-8"; // 编码
+    form.encoding = "utf-8"; // 编码
     // 保留扩展名
     form.keepExtensions = true;
+    form.maxFieldsSize = 2 * 1024 * 1024; //文件大小
     //文件存储路径 最后要注意加 '/' 否则会被存在public下
     form.uploadDir = path.join(__dirname, "../public/images/avatar/");
     let updateSucess = false;
-    form.parse(req, (err, fields, files) => {
+    form.parse(req, async (err, fields, files) => {
         if (err) {
             return next(err);
         }
         let imgPath = files.file.path;
+        console.log('imgPath', imgPath);
+
+        let oldPath = files.file.path;
+        let newPath = path.join(__dirname, `../public/images/avatar/${req.userid}_avatar.png`);
+
         let imgName = files.file.name;
         // 返回路径和文件名
         try {
-            fs.rename(imgPath, `${imgPath}.png`, async function () {
-                let paths = imgPath.split("\\");
+            fs.rename(oldPath, newPath, async function () {
+                let paths = newPath.split("\\");
                 let publicpath = paths[paths.length - 1];
-
-                let finalpath = `http://${address.ip()}:3000/images/avatar/${publicpath}.png`;
+                let finalpath = `http://${address.ip()}:3000/images/avatar/${publicpath}`;
                 let result = await userModel.updateOne({
-                    _id: req.userid
+                    account: req.userid
                 }, {
                     $set: {
                         avatar: finalpath
@@ -185,14 +353,24 @@ router.post("/avatar", async function (req, res, next) {
     });
 });
 
+
+//获取用户信息
 router.get("/info", async function (req, res, next) {
     try {
         let queryResult = await userModel.findOne({
-            _id: req.userid
-        });
+            account: req.userid
+        }).select('-__v');
+        let {
+            _id,
+            ...userInfo
+        } = queryResult._doc || {}
+        let userid = queryResult ? queryResult.account : '';
         res.json({
             status: 200,
-            user: filterUserInfo(queryResult._doc, req)
+            user: {
+                userid,
+                ...userInfo
+            }
         });
     } catch (error) {
         res.json({
@@ -203,45 +381,10 @@ router.get("/info", async function (req, res, next) {
     }
 });
 
-router.get('/workdata', async function (req, res, next) {
-    try {
-        let queryResult = await userModel.aggregate([{
-                $lookup: {
-                    from: 'Deparments',
-                    localField: 'department',
-                    foreignField: 'did',
-                    as: 'departmentInfo'
-                }
-            },
-            {
-                $unwind: '$departmentInfo'
-            },
-            {
-                $lookup: {
-                    from: 'Posts',
-                    localField: 'post',
-                    foreignField: 'pid',
-                    as: 'postInfo'
-                }
-            },
-            {
-                $unwind: '$postInfo'
-            }
-        ]);
-    } catch (error) {
-
-    }
-});
-
-
-
-
+//更新用户信息
 router.put("/modinfo", async function (req, res, next) {
     try {
-        let {
-            userid,
-            ...payload
-        } = req.body
+        let payload = req.body
 
         if (payload.status) {
             payload.status = Number(payload.status)
@@ -249,12 +392,28 @@ router.put("/modinfo", async function (req, res, next) {
         if (payload.phone) {
             payload.phone = Number(payload.phone)
         }
-        let queryResult = await userModel.updateOne({
-            _id: userid
+        let queryResult = await userModel.findOneAndUpdate({
+            account: req.userid
         }, {
             $set: payload
         });
-        console.log(queryResult);
+
+        let {
+            status: prevStatus,
+            name
+        } = queryResult._doc || {}
+
+        if (payload.status && payload.status !== prevStatus) {
+            let WorkingStatus = staffStatusList.find(r => r.name === '正在工作').id;
+
+            res.systemSocket().sendMessage({
+                broadcast: true,
+                socketBody: {
+                    message: '系统通知',
+                    description: `【${name}】已${payload.status === WorkingStatus?'上':'下'}线`,
+                }
+            });
+        }
         res.json({
             status: 200,
             message: "更新成功"

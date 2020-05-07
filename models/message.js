@@ -1,40 +1,32 @@
 const mongoose = require("mongoose");
 const MongooseSchema = mongoose.Schema;
-const CollectionName = "Meals";
+const CollectionName = "Messages";
 const autoIncrement = require("mongoose-auto-increment");
 const UserschemaDefine = {
-    pmid: { //父级套餐编号
+    mid: { //消息编号
         type: Number,
         default: null
     },
-    mid: { //套餐编号
+    from: {
         type: Number,
-        require: true
+        default: null
     },
-    name: { //套餐名称
+    to: {
+        type: Number,
+        default: null
+    },
+    message: {
         type: String,
         default: ''
-    },
-    minDeposit: { //最低定金
-        type: Number,
-        default: null
-    },
-    price: { //价格
-        type: Number,
-        default: null
-    },
-    content: { //套餐内容,业务id数组
-        type: String,
-        default: ''
-    },
-    activity: { //活动次数
-        type: Number,
-        default: 0
     },
     status: {
         type: Number,
-        default: 1
-    } //套餐生效 1启用 2禁用
+        default: 1 // 1未读,已读
+    },
+    time: {
+        type: Number,
+        default: Date.now
+    }
 };
 
 const UserSchema = new MongooseSchema(UserschemaDefine);

@@ -1,27 +1,22 @@
 var express = require("express");
 var router = express.Router();
-const address = require("address");
 
-var orderModel = require("../models/order");
 var neworderModel = require("../models/neworder");
-var receiptModel = require("../models/payreceipt");
-var newcontractModel = require("../models/newcontract");
+var userModel = require("../models/user");
+var messageModel = require("../models/message");
 var stautsModel = require('../models/customstatus');
 var customModel = require('../models/custom');
 var afterSalesModel = require('../models/aftersale');
 
 
-// 引入解析包
-var formidable = require("formidable");
-var fs = require("fs");
-let path = require("path");
-var userModel = require("../models/user");
 
 const {
-    recordStatus
+    reviewStatusList,
+    appRoleList
 } = require('../config');
 const {
-    generateConditions
+    generateConditions,
+    getDataStatisticsTime
 } = require("../tool");
 
 /* GET users listing. */
@@ -31,6 +26,7 @@ router.get("/", async function (req, res, next) {
 
 });
 
+//获取订单详情
 router.get("/detail", async function (req, res, next) {
     try {
         let orderDetail = await neworderModel.aggregate([{
@@ -38,7 +34,7 @@ router.get("/detail", async function (req, res, next) {
                     oid: Number(req.query.oid)
                 }
             },
-            {
+            { //关联创建人信息
                 $lookup: {
                     from: 'Users',
                     localField: 'creator',
@@ -49,7 +45,7 @@ router.get("/detail", async function (req, res, next) {
             {
                 $unwind: '$creatorInfo'
             },
-            {
+            { //关联用户信息
                 $lookup: {
                     from: 'Customs',
                     localField: 'cid',
@@ -60,7 +56,7 @@ router.get("/detail", async function (req, res, next) {
             {
                 $unwind: '$customInfo'
             },
-            {
+            { //关联套餐信息
                 $lookup: {
                     from: 'Meals',
                     localField: 'mid',
@@ -71,7 +67,7 @@ router.get("/detail", async function (req, res, next) {
             {
                 $unwind: '$mealInfo'
             },
-            {
+            { //关联售后信息
                 $lookup: {
                     from: 'Aftersales',
                     localField: 'oid',
@@ -82,7 +78,7 @@ router.get("/detail", async function (req, res, next) {
             {
                 $unwind: '$aftersales'
             },
-            {
+            { //关联收据信息
                 $lookup: {
                     from: 'Payreceipts',
                     localField: 'oid',
@@ -90,23 +86,16 @@ router.get("/detail", async function (req, res, next) {
                     as: 'payreceiptList'
                 }
             },
-            {
+            { //关联合同信息
                 $lookup: {
                     from: 'Newcontracts',
                     localField: 'oid',
                     foreignField: 'orderid',
                     as: 'contractList'
                 }
-            },
-            {
-                $lookup: {
-                    from: 'Followrecords',
-                    localField: 'oid',
-                    foreignField: 'oid',
-                    as: 'followrecords'
-                }
             }
         ])
+        console.log(orderDetail);
         res.json({
             status: 200,
             msg: '查新成功',
@@ -120,11 +109,39 @@ router.get("/detail", async function (req, res, next) {
 });
 
 
+//新增订单
 router.post("/add", async function (req, res, next) {
     try {
-        // let addSuccess = await orderModel.create(req.body);
         let addSuccess = await neworderModel.create(req.body);
-        if (addSuccess) {
+        let createAfterSaleRecord = await afterSalesModel.create({
+            orderid: addSuccess.oid,
+            cid: addSuccess.cid,
+            remark: addSuccess.remark
+        });
+
+        let sender = await userModel.findOne({
+            account: req.userid
+        });
+        let messageBody = {
+            from: req.userid,
+            to: appRoleList.find(r => r.name === '售后经理').id,
+            message: `【新订单/${addSuccess.oid}】 请您尽快分配售后处理哦`,
+            time: Date.now()
+        }
+        let socketBody = {
+            type: 'newOrder',
+            id: addSuccess.oid,
+            message: sender.name,
+            description: messageBody.message,
+            icon: sender.avatar
+        }
+        res.userSocket().sendMessage({
+            to: 'aftersaleManager',
+            messageBody,
+            socketBody
+        });
+
+        if (createAfterSaleRecord) {
             res.json({
                 status: 200,
                 msg: "新增成功",
@@ -140,33 +157,83 @@ router.get("/list", async function (req, res, next) {
     let {
         pageNo,
         pageSize,
-        userid,
+        startTime,
+        endTime,
         fuzzies, //模糊查询字段数组
         ...filters
     } = req.query;
+
+    let reviewPassedStatus = reviewStatusList.find(r => r.name === '审核通过').id;
     try {
-        let filteredConditions = generateConditions({
-            ...filters
-        }, fuzzies, {
-            toNumber: ['cid']
+        let filteredConditions = generateConditions(filters, fuzzies, {
+            toNumber: ['oid', 'cid', 'mid', 'creator', 'distributor', 'lastExecutor', 'executor']
         });
+        if (startTime && endTime) { //传入了时间
+            filteredConditions.$and = [{
+                    'createTime': {
+                        $gt: Number(startTime)
+                    }
+                }, {
+                    'createTime': {
+                        $lt: Number(endTime)
+                    }
+                }
+
+            ]
+        }
         const [totalCount, list] = await Promise.all([
             neworderModel.countDocuments(filteredConditions),
-
             neworderModel.aggregate([{
                     $match: filteredConditions,
                 }, {
-                    $lookup: {
+                    $lookup: { //关联套餐信息
                         from: 'Meals',
                         localField: 'mid',
                         foreignField: 'mid',
-                        as: 'mealInfo'
+                        as: 'mealList'
                     }
                 },
                 {
-                    $unwind: '$mealInfo'
+                    $addFields: {
+                        mealInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$mealList', 0]
+                            }, {}]
+                        }
+                    },
                 },
                 {
+                    $addFields: {
+                        mealName: {
+                            $ifNull: ['$mealInfo.name', '']
+                        }
+                    },
+                },
+                {
+                    $lookup: { //关联客户信息
+                        from: 'Customs',
+                        localField: 'cid',
+                        foreignField: 'cid',
+                        as: 'customList'
+                    }
+                },
+                {
+                    $addFields: {
+                        customInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$customList', 0]
+                            }, {}]
+                        }
+                    },
+                },
+                {
+                    $addFields: {
+                        customName: {
+                            $ifNull: ['$customInfo.name', '']
+                        }
+                    },
+                },
+                { //关联收款单据信息
                     $lookup: {
                         from: 'Payreceipts',
                         localField: 'oid',
@@ -175,6 +242,53 @@ router.get("/list", async function (req, res, next) {
                     }
                 },
                 {
+                    $addFields: {
+                        paidTotal: {
+                            $reduce: {
+                                input: '$payList',
+                                initialValue: 0,
+                                in: {
+                                    $add: ["$$value", "$$this.money"]
+                                }
+                            }
+                        },
+                        paidPassed: {
+                            $reduce: {
+                                input: '$payList',
+                                initialValue: 0,
+                                in: {
+                                    $add: ["$$value", {
+                                        $cond: {
+                                            if: {
+                                                $eq: ["$$this.status", reviewPassedStatus]
+                                            },
+                                            then: "$$this.money",
+                                            else: 0
+                                        }
+                                    }]
+                                }
+                            }
+                        }
+                    }
+                },
+                { //关联合同信息
+                    $lookup: {
+                        from: 'Newcontracts',
+                        localField: 'oid',
+                        foreignField: 'orderid',
+                        as: 'contractList'
+                    }
+                },
+                {
+                    $addFields: {
+                        contract: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$contractList', 0]
+                            }, {}]
+                        }
+                    }
+                },
+                { //关联创建人
                     $lookup: {
                         from: 'Users',
                         localField: 'creator',
@@ -186,15 +300,103 @@ router.get("/list", async function (req, res, next) {
                     $unwind: '$creatorInfo'
                 },
                 {
-                    $lookup: {
-                        from: 'Newcontracts',
-                        localField: 'oid',
-                        foreignField: 'orderid',
-                        as: 'contractList'
+                    $addFields: {
+                        creatorName: '$creatorInfo.name'
                     }
                 },
+                { //关联分配人(售后经理)
+                    $lookup: {
+                        from: 'Users',
+                        localField: 'distributor',
+                        foreignField: 'account',
+                        as: 'distributorList'
+                    }
+                },
+                {
+                    $addFields: {
+                        distributorInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ["$distributorList", 0]
+                            }, {}]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        distributorName: {
+                            $ifNull: ['$distributorInfo.name', '']
+                        }
+                    }
+                },
+                { //关联上一售后
+                    $lookup: {
+                        from: 'Users',
+                        localField: 'lastExecutor',
+                        foreignField: 'account',
+                        as: 'lastExecutorList'
+                    }
+                },
+                {
+                    $addFields: {
+                        lastExecutorInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ["$lastExecutorList", 0]
+                            }, {}]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        lastExecutorName: {
+                            $ifNull: ['$lastExecutorInfo.name', '']
+                        }
+                    }
+                },
+                { //关联售后
+                    $lookup: {
+                        from: 'Users',
+                        localField: 'executor',
+                        foreignField: 'account',
+                        as: 'executorList'
+                    }
+                },
+                {
+                    $addFields: {
+                        executorInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ["$executorList", 0]
+                            }, {}]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        executorName: {
+                            $ifNull: ['$executorInfo.name', '']
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        creatorInfo: 0,
+                        mealList: 0,
+                        mealInfo: 0,
+                        customList: 0,
+                        customInfo: 0,
+                        contractList: 0,
+                        distributorList: 0,
+                        distributorInfo: 0,
+                        lastExecutorList: 0,
+                        lastExecutorInfo: 0,
+                        executorList: 0,
+                        executorInfo: 0,
+                        _id: 0,
+                        __v: 0
+                    }
+                }
+
             ]).sort({
-                _id: -1
+                createTime: -1
             })
             .skip((Number(pageNo) - 1) * Number(pageSize))
             .limit(Number(pageSize))
@@ -232,11 +434,10 @@ router.get("/list", async function (req, res, next) {
 
 
 //获取支付审核通过的订单
-router.get('/paidPassedOrderList', async function (req, res, next) {
+router.get('/paidPassedOrderList', async function (req, res) {
     let {
         pageNo,
         pageSize,
-        userid,
         fuzzies, //模糊查询字段数组
         ...filters
     } = req.query;
@@ -304,6 +505,14 @@ router.get('/paidPassedOrderList', async function (req, res, next) {
                         as: 'payreceiptList'
                     }
                 },
+                {
+                    $lookup: {
+                        from: 'Followrecords',
+                        localField: 'oid',
+                        foreignField: 'oid',
+                        as: 'followList'
+                    }
+                },
             ]).sort({
                 _id: -1
             })
@@ -339,136 +548,6 @@ router.get('/paidPassedOrderList', async function (req, res, next) {
             }
         });
     }
-});
-
-
-router.post('/addReceipt', async function (req, res, next) {
-    try {
-        let receipt = await receiptModel.create({
-            ...req.body,
-            status: 1,
-            createTime: Date.now()
-        })
-        let dealStatus = await stautsModel.findOne({
-            name: '已成交'
-        });
-        console.log('dealStatus  req.body.cid', dealStatus, req.body.customid);
-        let updateCustomStatus = await customModel.updateOne({
-            cid: req.body.customid
-        }, {
-            $set: {
-                status: dealStatus.sid
-            }
-        });
-        if (updateCustomStatus) {
-            res.json({
-                status: 200,
-                msg: '新增成功',
-                receiptID: receipt.payreceiptid
-            });
-        }
-    } catch (error) {
-        console.log('/addReceipt', error);
-    }
-});
-
-router.post('/payshot', async function (req, res, next) {
-    let form = new formidable.IncomingForm();
-    // form.encoding = "utf-8"; // 编码
-    // 保留扩展名
-    // form.keepExtensions = true;
-    //文件存储路径 最后要注意加 '/' 否则会被存在public下
-    form.uploadDir = path.join(__dirname, "../public/images/payshot/");
-    let updateSucess = false;
-    form.parse(req, (err, fields, files) => {
-        if (err) {
-            return next(err);
-        }
-        let imgPath = files.file.path;
-        let imgName = files.file.name;
-        // 返回路径和文件名
-        try {
-            fs.rename(imgPath, `${imgPath}.png`, async function () {
-                let paths = imgPath.split("\\");
-                let publicpath = paths[paths.length - 1];
-
-                let finalpath = `http://${address.ip()}:3000/images/payshot/${publicpath}.png`;
-                let result = await receiptModel.updateOne({
-                    payreceiptid: Number(fields.receiptid)
-                }, {
-                    $set: {
-                        shot: finalpath
-                    }
-                });
-                updateSucess = result.nModified == 1;
-                res.json({
-                    status: updateSucess ? 200 : 500,
-                    data: updateSucess ? {
-                        name: imgName,
-                        path: finalpath
-                    } : {}
-                });
-            });
-        } catch (err) {}
-    });
-});
-
-router.post('/addContract', async function (req, res, next) {
-    try {
-        let contract = await newcontractModel.create({
-            ...req.body,
-            status: 1,
-            createTime: Date.now()
-        })
-        res.json({
-            status: 200,
-            msg: '新增成功',
-            ctid: contract.ctid
-        });
-    } catch (error) {
-        console.log('/addContract', error);
-    }
-});
-
-router.post('/contractshot', async function (req, res, next) {
-    let form = new formidable.IncomingForm();
-    form.encoding = "utf-8"; // 编码
-    // 保留扩展名
-    // form.keepExtensions = true;
-    //文件存储路径 最后要注意加 '/' 否则会被存在public下
-    form.uploadDir = path.join(__dirname, "../public/images/contractshot/");
-    let updateSucess = false;
-    form.parse(req, (err, fields, files) => {
-        if (err) {
-            return next(err);
-        }
-        let imgPath = files.file.path;
-        let imgName = files.file.name;
-        // 返回路径和文件名
-        try {
-            fs.rename(imgPath, `${imgPath}.png`, async function () {
-                let paths = imgPath.split("\\");
-                let publicpath = paths[paths.length - 1];
-
-                let finalpath = `http://${address.ip()}:3000/images/contractshot/${publicpath}.png`;
-                let result = await newcontractModel.updateOne({
-                    ctid: Number(fields.ctid)
-                }, {
-                    $set: {
-                        shot: finalpath
-                    }
-                });
-                updateSucess = result.nModified == 1;
-                res.json({
-                    status: updateSucess ? 200 : 500,
-                    data: updateSucess ? {
-                        name: imgName,
-                        path: finalpath
-                    } : {}
-                });
-            });
-        } catch (err) {}
-    });
 });
 
 //升级订单
@@ -522,16 +601,76 @@ router.delete("/delete", async function (req, res, next) {
     }
 });
 
+//更新订单
+
+router.put('/update', async (req, res) => {
+    try {
+        let {
+            oids,
+            ...payload
+        } = req.body;
+
+        let toNumber = ['distributor', 'executor', 'allocTime', 'upgradeTime']
+        for (const key in payload) {
+            if (toNumber.includes(key)) {
+                payload[key] = Number(payload[key])
+            }
+        }
+        let updateOrderRecord = await neworderModel.updateMany({
+            oid: {
+                $in: oids
+            }
+        }, {
+            $set: payload
+        });
+        console.log('updateOrderRecord', oids, payload, updateOrderRecord);
+        res.isuccess();
+    } catch (error) {
+        console.log(error)
+        res.ierror(error)
+    }
+
+});
+
 //分配订单
-router.put("/afterAlloc", async function (req, res, next) {
+router.put("/alloc", async function (req, res, next) {
     let {
         oid,
-        cid,
-        remark,
         ...payload
     } = req.body;
     try {
-        let updateOrderRecord = await neworderModel.updateOne({
+        let createMs = Date.now(); //现在准备分配的时间
+        let DataStatisticsTime = getDataStatisticsTime(); //任务统计时间
+
+        let executor = Number(payload.executor);
+        let distributor = Number(payload.distributor);
+
+        let findExecutor = await userModel.findOne({
+            account: executor
+        });
+        let reset = createMs >= DataStatisticsTime && findExecutor.lastTaskTime < DataStatisticsTime; //如果本次分配时间是今天,且上次分配时间是昨天,那么重置该员工的分配数量
+
+        let updatePipes = reset ? {
+            $set: {
+                lastTaskTime: createMs,
+                todayRecepted: 1
+            }
+        } : {
+            $set: {
+                lastTaskTime: createMs
+            },
+            $inc: {
+                todayRecepted: 1
+            }
+        };
+
+        userModel.updateOne({
+            account: executor
+        }, updatePipes).then((result) => {
+            console.log("------------------------------------", result)
+        });
+
+        let updateOrderRecord = await neworderModel.findOneAndUpdate({ //更新订单
             oid
         }, {
             $set: {
@@ -539,35 +678,30 @@ router.put("/afterAlloc", async function (req, res, next) {
                 allocTime: Date.now()
             }
         });
-        let hasAfterSalesRecord = await afterSalesModel.findOne({
-            orderid: oid
-        });
-        console.log('hasAfterSalesRecord', hasAfterSalesRecord, payload.distributor, payload.executor, remark);
-        if (!hasAfterSalesRecord) {
-            console.log('orderid', oid);
-            let createAfterSaleRecord = await afterSalesModel.create({
-                orderid: oid,
-                cid,
-                distributor: payload.distributor,
-                executor: payload.executor,
-                remark,
-                createTime: Date.now()
-            });
 
+        let sender = await userModel.findOne({
+            account: distributor
+        });
+        let messageBody = {
+            from: distributor,
+            to: executor,
+            message: `【订单售后/${oid}】 已经分配给你啦,请你跟进哦`,
+            time: Date.now()
         }
-        if (updateOrderRecord) {
-            res.json({
-                status: 200,
-                msg: "分配成功"
-            });
+        let socketBody = {
+            type: 'newAftersale',
+            id: oid,
+            message: sender.name,
+            description: messageBody.message,
+            icon: sender.avatar
         }
+        res.userSocket(executor).sendMessage({
+            messageBody,
+            socketBody
+        });
+        updateOrderRecord && res.isuccess();
     } catch (error) {
-        console.log('createAfterSaleRecord error', error);
-
-        res.json({
-            status: 400,
-            msg: error.message
-        });
+        res.ierror(error);
     }
 });
 

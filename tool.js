@@ -52,3 +52,10 @@ exports.buildTree = function (treeData, rootkey = 100000) {
     console.log("childstore********************", childstore);
     return [childstore[rootkey]];
 }
+
+exports.getFileType = function (filePath) {
+    //获取最后一个.的位置
+    var index = filePath.lastIndexOf(".");
+    //获取后缀
+    return filePath.substr(index + 1);
+}

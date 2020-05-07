@@ -4,16 +4,17 @@
  * Module dependencies.
  */
 
-var app = require('../app');
-var debug = require('debug')('crmservice:server');
-var http = require('http');
-var startSocket = require('../SOCKETIO')
+var app = require("../app");
+var debug = require("debug")("crmservice:server");
+var http = require("http");
+var socketManager = require('../socketManger');
+
 /**
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
-app.set('port', port);
+var port = normalizePort(process.env.PORT || "3000");
+app.set("port", port);
 
 /**
  * Create HTTP server.
@@ -22,18 +23,43 @@ var server = http.createServer(app);
 /**
  * Create Websockct server.
  */
-var io = require('socket.io')(server);
-startSocket(io)
+var io = require("socket.io")(server);
+global.systemSocketIo = {}; //用于存储所有连接进来的socket
+global.userSocketIo = {}; //用于存储所有连接进来的socket
 
-// console.log('gloabal SOCKET IO', global.SocketIO);
+
+
+io.on("connection", function (socket) {
+  console.log(" a new systemSocket coming");
+  socketManager.addSocket(socket, 'system');
+});
+
+io.of("/user").on("connection", function (socket) {
+  console.log(" a new userSocket coming");
+  socketManager.addSocket(socket, 'user');
+  global.userSocketIo[socket.handshake.query.userid] = socket;
+
+  console.log('socket.handshake.query.role', socket.handshake.query.role, typeof socket.handshake.query.role);
+  let timer = setTimeout(() => {
+    // console.log(`socket.to('seller')`, socket.to('seller'));
+
+    clearTimeout(timer)
+  }, 2000);
+  socket.join(socket.handshake.query.role, () => {
+    socket.to('xxxx').emit('message', {
+      message: '测试消息',
+      description: '测试消息'
+    });
+  });
+});
 
 /**
  * Listen on provided port, on all network interfaces.
  */
 
 server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+server.on("error", onError);
+server.on("listening", onListening);
 
 /**
  * Normalize a port into a number, string, or false.
@@ -60,22 +86,20 @@ function normalizePort(val) {
  */
 
 function onError(error) {
-  if (error.syscall !== 'listen') {
+  if (error.syscall !== "listen") {
     throw error;
   }
 
-  var bind = typeof port === 'string' ?
-    'Pipe ' + port :
-    'Port ' + port;
+  var bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
 
   // handle specific listen errors with friendly messages
   switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
+    case "EACCES":
+      console.error(bind + " requires elevated privileges");
       process.exit(1);
       break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
+    case "EADDRINUSE":
+      console.error(bind + " is already in use");
       process.exit(1);
       break;
     default:
@@ -89,8 +113,6 @@ function onError(error) {
 
 function onListening() {
   var addr = server.address();
-  var bind = typeof addr === 'string' ?
-    'pipe ' + addr :
-    'port ' + addr.port;
-  debug('Listening on ' + bind);
+  var bind = typeof addr === "string" ? "pipe " + addr : "port " + addr.port;
+  debug("Listening on " + bind);
 }

@@ -36,7 +36,6 @@ router.get("/list", async function (req, res, next) {
     let {
         pageNo,
         pageSize,
-        userid,
         fuzzies, //模糊查询字段数组
         ...filters
     } = req.query;
@@ -119,7 +118,7 @@ router.put("/update", async function (req, res, next) {
     }
 });
 
-//用户登出
+//删除业务
 router.delete("/delete", async function (req, res, next) {
     try {
         let result = await businessModel.updateOne({

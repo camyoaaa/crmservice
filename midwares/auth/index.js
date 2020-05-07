@@ -21,8 +21,8 @@ const auth = function (req, res, next) {
             return;
         } else { //如果通过token验证,则将验证信息写入req对象
             req.userid = verifyToken;
-            req.query.userid = verifyToken;
-            req.body.userid = verifyToken;
+            // req.query.userid = verifyToken;
+            // req.body.userid = verifyToken;
         }
     }
     next();

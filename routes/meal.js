@@ -16,136 +16,138 @@ router.get("/", function (req, res, next) {
 });
 
 router.post("/add", async function (req, res, next) {
-    const {
-        name,
-        price,
-        minDeposit,
-        content
-    } = req.body;
     try {
-        console.log(req.body);
-        let addSuccess = await mealModel.create({
-            ...req.body,
-            status: recordStatus.Enable
-        });
-        if (addSuccess) {
-            res.json({
-                status: 200,
-                msg: "新增成功"
-            });
-        }
+        await mealModel.create(req.body);
+        res.isuccess();
     } catch (error) {
         console.log(error);
+        res.ierror(error);
     }
 });
 
 router.get("/list", async function (req, res, next) {
-    let {
-        pageNo,
-        pageSize,
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
     try {
-        let filteredConditions = generateConditions({
-            ...filters,
-            status: recordStatus.Enable
-        }, fuzzies);
-        const [totalCount, list] = await Promise.all([
-            mealModel.countDocuments(filteredConditions),
-            mealModel
-            .find(filteredConditions)
-            .sort({
-                _id: -1
-            })
-            .skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-            .select({
-                __v: 0,
-                _id: 0
-            })
-        ]);
-        if (totalCount && Array.isArray(list) && list.length > 0) {
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
+        const list = await mealModel.aggregate([{
+                $match: {
+                    pmid: null
                 }
-            });
-        }
-    } catch (error) {
-        console.log(error);
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
+            },
+            {
+                $lookup: {
+                    from: 'Meals',
+                    localField: 'mid',
+                    foreignField: 'pmid',
+                    as: 'childMealList'
+                }
+            },
+            {
+                $addFields: {
+                    childMealList1: {
+                        $cond: {
+                            if: {
+                                $arrayElemAt: ['$childMealList', 0]
+                            },
+                            then: '$childMealList',
+                            else: [{}]
+                        }
+                    }
+                }
+            },
+            {
+                $project: {
+                    childMealList: 0
+                }
+            },
+            {
+                $unwind: "$childMealList1"
+            },
+            {
+                $lookup: {
+                    from: 'Neworders',
+                    localField: 'childMealList1.mid',
+                    foreignField: 'mid',
+                    as: 'childMealList1.orderList'
+                }
+            },
+            {
+                $addFields: {
+                    'childMealList1.orderNumber': {
+                        $size: '$childMealList1.orderList'
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: '$mid',
+                    mid: {
+                        $first: "$mid"
+                    },
+                    price: {
+                        $first: '$price'
+                    },
+                    pmid: {
+                        $first: '$pmid'
+                    },
+                    name: {
+                        $first: '$name'
+                    },
+                    minDeposit: {
+                        $first: '$minDeposit'
+                    },
+                    content: {
+                        $first: '$content'
+                    },
+                    activity: {
+                        $first: '$activity'
+                    },
+                    status: {
+                        $first: '$status'
+                    },
+                    childMealList: {
+                        $push: '$childMealList1'
+                    }
+                }
             }
-        });
+        ]).sort('mid');
+        res.isuccess(list);
+
+    } catch (error) {
+        res.ierror(error);
     }
 });
 
+//更新菜单 (可批量)
 router.put("/update", async function (req, res, next) {
     const {
-        mid,
+        mids,
         ...payload
     } = req.body;
     try {
-        let updateSuccess = await mealModel.updateOne({
-            mid
+        let updateSuccess = await mealModel.updateMany({
+            mid: {
+                $in: mids
+            }
         }, {
             $set: payload
         });
-
-        if (updateSuccess) {
-            res.json({
-                status: 200,
-                msg: "更新成功"
-            });
-        }
+        console.log(updateSuccess);
+        updateSuccess && res.isuccess();
     } catch (error) {
-        console.log(error);
-        res.json({
-            status: 500,
-            msg: "更新失败"
-        });
+        res.ierror(error);
     }
 });
 
-//用户登出
+//删除套餐(可批量)
 router.delete("/delete", async function (req, res, next) {
     try {
-        let result = await mealModel.updateOne({
-            mid: req.body.mid
-        }, {
-            $set: {
-                status: recordStatus.Delete
+        let result = await mealModel.deleteMany({
+            mid: {
+                $in: req.body.mids
             }
         });
-        console.log(result, typeof req.body.account);
-        if (result) {
-            res.json({
-                status: 200,
-                msg: "更新成功"
-            });
-        }
+        result && res.isuccess();
     } catch (error) {
-        res.json({
-            status: 400,
-            msg: error.message
-        });
+        res.isuccess(error);
     }
 });
 

@@ -4,10 +4,14 @@ var router = express.Router();
 var customModel = require("../models/custom");
 var userModel = require("../models/user");
 var customStatusModel = require("../models/customstatus.js");
-
+var messageModel = require('../models/message');
 const {
     getDataStatisticsTime
 } = require("../tool");
+
+const {
+    customStatusList
+} = require('../config');
 
 const {
     generateConditions
@@ -16,96 +20,76 @@ const {
 
 
 /* GET users listing. */
-router.get("/", async function (req, res, next) {
-    try {
-        let customInfo = await customModel.findOne({
-            cid: req.query.cid
-        }).select({
-            '_id': 0,
-            "_v": 0
-        });
-        if (customInfo) {
-            res.json({
-                status: 200,
-                msg: "查询成功",
-                data: customInfo
-            });
-        }
-    } catch (error) {
+router.get("/", async function (req, res, next) {});
 
-    }
-});
-
-router.get('/detail', async function (req, res, next) {
-    try {
-        let customInfo = await customModel.aggregate([{
-                $match: {
-                    cid: Number(req.query.cid)
-                }
-            },
-            {
-                $lookup: {
-                    from: 'Customfroms',
-                    localField: 'from',
-                    foreignField: 'oid',
-                    as: 'fromInfo'
-                }
-            },
-            {
-                $unwind: '$fromInfo'
-            },
-            {
-                $lookup: {
-                    from: 'CustomStatus',
-                    localField: 'status',
-                    foreignField: 'sid',
-                    as: 'statusInfo'
-                }
-            },
-            {
-                $unwind: '$statusInfo'
-            },
-            {
-                $lookup: {
-                    from: 'Neworders',
-                    localField: 'cid',
-                    foreignField: 'cid',
-                    as: 'orderList'
-                }
-            }
-        ]);
-
-        res.json({
-            status: 200,
-            msg: '查询成功',
-            data: customInfo[0]
-        })
-    } catch (error) {
-
-    }
-});
-
-
+//新增客户
 router.post("/add", async function (req, res, next) {
     try {
-
         let createMs = Date.now(); //现在准备分配的时间
-        //查找默认状态
-        let {
-            _doc: matchStatus
-        } = await customStatusModel.findOne({
-            isdefault: true
+        let DataStatisticsTime = getDataStatisticsTime(); //任务统计时间
+        let newStatus = customStatusList.find(s => s.name === '新客户').id; //新客户状态id
+
+        let seller = Number(req.body.seller);
+        let receptionist = Number(req.body.receptionist);
+
+        let findSeller = await userModel.findOne({
+            account: seller
         });
-        //新录入客户
-        let addSuccess = await customModel.create({
-            status: matchStatus.sid,
+        let reset = createMs >= DataStatisticsTime && findSeller.lastTaskTime < DataStatisticsTime; //如果本次分配时间是今天,且上次分配时间是昨天,那么重置该员工的分配数量
+
+        let updatePipes = reset ? {
+            $set: {
+                lastTaskTime: createMs,
+                todayRecepted: 1
+            }
+        } : {
+            $set: {
+                lastTaskTime: createMs
+            },
+            $inc: {
+                todayRecepted: 1
+            }
+        };
+
+        let allocPromise = userModel.updateOne({
+            account: seller
+        }, updatePipes)
+
+        let addPromise = customModel.create({
+            status: newStatus,
             receptTime: createMs,
+            seller,
+            receptionist,
             ...req.body
         });
-        global.SocketIO.salesManager.emit('test', 'salesManager xxxxxxxxx', function (data) {
-            console.log('global.SocketIO.salesManager test data', data);
+        let [allocResult, addResult] = await Promise.all([allocPromise, addPromise]);
+
+        let sender = await userModel.findOne({
+            account: receptionist
         });
-        if (addSuccess) {
+
+        let messageBody = {
+            from: receptionist,
+            to: seller,
+            message: `【${addResult.name}/${addResult.cid}】 已经分配给你啦,快去协助他(她)吧`,
+            time: Date.now()
+        }
+        let socketBody = {
+            type: 'allocCustom',
+            id: addResult.cid,
+
+            message: sender.name,
+            description: messageBody.message,
+            icon: sender.avatar,
+
+            messageBody
+        }
+        res.userSocket(seller).sendMessage({
+            messageBody,
+            socketBody
+        });
+
+        if (allocResult && addResult) {
             res.json({
                 status: 200,
                 msg: "新增成功"
@@ -116,65 +100,21 @@ router.post("/add", async function (req, res, next) {
     }
 });
 
-//分配销售
-router.post('/sellerAlloc', async function (req, res, next) {
-    let DataStatisticsTime = getDataStatisticsTime(); //任务统计时间
-    let createMs = Date.now(); //现在准备分配的时间
-    let findSeller = await userModel.findOne({
-        account: Number(req.body.seller)
-    });
-    let reset = createMs >= DataStatisticsTime && findSeller.lastTaskTime < DataStatisticsTime; //如果本次分配时间是今天,且上次分配时间是昨天,那么重置该员工的分配数量
-
-    let updatePipes = reset ? {
-        $set: {
-            lastTaskTime: createMs,
-            todayRecepted: 1
-        }
-    } : {
-        $set: {
-            lastTaskTime: createMs
-        },
-        $inc: {
-            todayRecepted: 1
-        }
-    };
-
-    let success = await Promise.all([
-        userModel.updateOne({
-            account: Number(req.body.seller)
-        }, updatePipes),
-        customModel.updateOne({
-            cid: Number(req.body.cid)
-        }, {
-            seller: Number(req.body.seller),
-            sellerAllocTime: createMs,
-            sellerManager: req.body.sellerManager
-        })
-    ]);
-    if (success) {
-
-        function socketiotoSeller() {}
-        res.json({
-            status: 200,
-            msg: '分配成功'
-        });
-    }
-});
-
-//查询接待客户,提供给:接待人员
-router.get('/receptList', async function (req, res, next) {
+//查询客户
+router.get('/list', async function (req, res, next) {
     let {
-        pageNo,
-        pageSize,
-        contact, //联系方式
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
+        pageNo = 1,
+            pageSize = 10,
+            contact, //联系方式
+            startTime,
+            endTime,
+            fuzzies, //模糊查询字段数组
+            ...filters
     } = req.query;
 
     //过滤后的查询条件
     let filteredConditions = generateConditions(filters, fuzzies, {
-        toNumber: ['seller', 'aftersale', 'receptionist', 'status', 'cid']
+        toNumber: ['cid', 'receptionist', 'sellerManager', 'lastSeller', 'seller', 'status']
     });
 
     if (contact) { //如果传入联系方式
@@ -194,22 +134,35 @@ router.get('/receptList', async function (req, res, next) {
             ]
         }
     }
+
+    if (startTime && endTime) { //传入了时间
+        filteredConditions.$and = [{
+                'receptTime': {
+                    $gt: Number(startTime)
+                }
+            }, {
+                'receptTime': {
+                    $lt: Number(endTime)
+                }
+            }
+
+        ]
+    }
+
+    console.log('filteredConditions', filteredConditions);
+
+    const groupFields = ['cid', 'name', 'from', 'phone', 'wx', 'qq', 'idcard', 'address', 'province', 'city', 'county', 'status', 'receptionist', 'sellerManager', 'seller', 'lastSeller', 'remark', 'receptTime', 'updateTime', 'fromZn', 'receptionistName', 'lastSellerName', 'sellerName', 'followList']
+    let groupActions = {};
+    groupFields.forEach(element => {
+        groupActions[element] = {
+            $first: `$${element}`
+        }
+    });
     try {
         const [totalCount, list] = await Promise.all([
             customModel.countDocuments(filteredConditions),
             customModel.aggregate([{
                     $match: filteredConditions
-                },
-                { //关联状态
-                    $lookup: {
-                        from: 'CustomStatus',
-                        localField: 'status',
-                        foreignField: 'sid',
-                        as: 'status_doc'
-                    },
-                },
-                {
-                    $unwind: '$status_doc'
                 },
                 { //关联客户来源
                     $lookup: {
@@ -221,248 +174,75 @@ router.get('/receptList', async function (req, res, next) {
                 },
                 {
                     $unwind: '$from_doc'
+                },
+                {
+                    $addFields: {
+                        fromZn: '$from_doc.name'
+                    }
                 },
                 { //关联接待人员
                     $lookup: {
                         from: 'Users',
                         localField: 'receptionist',
                         foreignField: 'account',
-                        as: 'receptionist_doc'
+                        as: 'receptionistInfo'
                     },
                 },
                 {
-                    $unwind: '$receptionist_doc'
-                }
-            ]).sort({
-                'status_doc.order': 1, //根据状态排序
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        res.json({
-            status: 200,
-            message: "获取成功",
-            timestamp: Date.now(),
-            result: {
-                pageNo: Number(pageNo),
-                pageSize: Number(pageSize),
-                totalCount,
-                totalPage: Math.ceil(totalCount / pageSize),
-                data: list
-            }
-        });
-    } catch (error) {
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-//获取已经分配或未分配的客户列表 ,提供给:售前经理
-router.get('/sellerAllocList', async function (req, res, next) {
-    let {
-        pageNo,
-        pageSize,
-        contact, //联系方式
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-
-    //过滤后的查询条件
-    let filteredConditions = generateConditions(filters, fuzzies, {
-        toNumber: ['seller', 'receptionist', 'status', 'cid']
-    });
-
-    if (contact) { //如果传入联系方式
-        let NumberedContact = Number(contact)
-        if (isNaN(NumberedContact)) { //只有微信号不能转化为数字
-            filteredConditions.wx = new RegExp(contact)
-        } else {
-            filteredConditions.$or = [{
-                    qq: new RegExp(NumberedContact)
+                    $unwind: '$receptionistInfo'
                 },
                 {
-                    wx: new RegExp(NumberedContact)
+                    $addFields: {
+                        receptionistName: '$receptionistInfo.name'
+                    }
                 },
-                {
-                    phone: new RegExp(NumberedContact)
-                },
-            ]
-        }
-    }
-    try {
-        const [totalCount, list] = await Promise.all([
-            customModel.countDocuments(filteredConditions),
-            customModel.aggregate([{
-                    $match: filteredConditions
-                },
-                { //关联状态
-                    $lookup: {
-                        from: 'CustomStatus',
-                        localField: 'status',
-                        foreignField: 'sid',
-                        as: 'status_doc'
-                    },
-                },
-                {
-                    $unwind: '$status_doc'
-                },
-                { //关联客户来源
-                    $lookup: {
-                        from: 'Customfroms',
-                        localField: 'from',
-                        foreignField: 'oid',
-                        as: 'from_doc'
-                    },
-                },
-                {
-                    $unwind: '$from_doc'
-                },
-                { //关联接待人员
+                { //关联上一销售人员(销售)
                     $lookup: {
                         from: 'Users',
-                        localField: 'receptionist',
+                        localField: 'lastSeller',
                         foreignField: 'account',
-                        as: 'receptionist_doc'
+                        as: 'lastSellerList'
                     },
                 },
                 {
-                    $unwind: '$receptionist_doc'
+                    $addFields: {
+                        lastSellerInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ["$lastSellerList", 0]
+                            }, {}]
+                        }
+                    }
                 },
-                { //关联售前人员
+                {
+                    $addFields: {
+                        lastSellerName: {
+                            $ifNull: ['$lastSellerInfo.name', '']
+                        }
+                    }
+                },
+                { //关联销售人员(销售)
                     $lookup: {
                         from: 'Users',
                         localField: 'seller',
                         foreignField: 'account',
-                        as: 'seller_doc'
-                    },
-                }
-            ]).sort({
-                'status_doc.order': 1, //根据状态排序
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        res.json({
-            status: 200,
-            message: "获取成功",
-            timestamp: Date.now(),
-            result: {
-                pageNo: Number(pageNo),
-                pageSize: Number(pageSize),
-                totalCount,
-                totalPage: Math.ceil(totalCount / pageSize),
-                data: list
-            }
-        });
-    } catch (error) {
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-//获取分配到自己的客户   --- 售前/销售人员
-router.get('/sellerCustomList', async function (req, res, next) {
-    let {
-        pageNo,
-        pageSize,
-        contact, //联系方式
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-
-    //过滤后的查询条件
-    let filteredConditions = generateConditions(filters, fuzzies, {
-        toNumber: ['seller', 'receptionist', 'status', 'cid']
-    });
-
-    if (contact) { //如果传入联系方式
-        let NumberedContact = Number(contact)
-        if (isNaN(NumberedContact)) { //只有微信号不能转化为数字
-            filteredConditions.wx = new RegExp(contact)
-        } else {
-            filteredConditions.$or = [{
-                    qq: new RegExp(NumberedContact)
-                },
-                {
-                    wx: new RegExp(NumberedContact)
-                },
-                {
-                    phone: new RegExp(NumberedContact)
-                },
-            ]
-        }
-    }
-    try {
-        const [totalCount, list] = await Promise.all([
-            customModel.countDocuments(filteredConditions),
-            customModel.aggregate([{
-                    $match: filteredConditions
-                },
-                { //关联状态
-                    $lookup: {
-                        from: 'CustomStatus',
-                        localField: 'status',
-                        foreignField: 'sid',
-                        as: 'status_doc'
+                        as: 'sellerList'
                     },
                 },
                 {
-                    $unwind: '$status_doc'
-                },
-                { //关联客户来源
-                    $lookup: {
-                        from: 'Customfroms',
-                        localField: 'from',
-                        foreignField: 'oid',
-                        as: 'from_doc'
-                    },
+                    $addFields: {
+                        sellerInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ["$sellerList", 0]
+                            }, {}]
+                        }
+                    }
                 },
                 {
-                    $unwind: '$from_doc'
-                },
-                { //关联接待人员
-                    $lookup: {
-                        from: 'Users',
-                        localField: 'sellerManager',
-                        foreignField: 'account',
-                        as: 'sellerManager_doc'
-                    },
-                },
-                {
-                    $unwind: '$sellerManager_doc'
-                },
-                { //关联售前人员
-                    $lookup: {
-                        from: 'Users',
-                        localField: 'seller',
-                        foreignField: 'account',
-                        as: 'seller_doc'
-                    },
-                },
-                {
-                    $unwind: '$seller_doc'
+                    $addFields: {
+                        sellerName: {
+                            $ifNull: ['$sellerInfo.name', '']
+                        }
+                    }
                 },
                 { //关联跟进记录
                     $lookup: {
@@ -472,18 +252,98 @@ router.get('/sellerCustomList', async function (req, res, next) {
                         as: 'followList'
                     },
                 },
-                { //关联跟进记录
+                { //关联签单记录
                     $lookup: {
                         from: 'Neworders',
                         localField: 'cid',
                         foreignField: 'cid',
                         as: 'orderList'
                     },
+                },
+                {
+                    $addFields: {
+                        orderList1: {
+                            $cond: {
+                                if: {
+                                    $arrayElemAt: ['$orderList', 0]
+                                },
+                                then: '$orderList',
+                                else: [null]
+                            }
+                        }
+                    }
+                },
+                {
+                    $unwind: '$orderList1'
+                },
+                {
+                    $addFields: {
+                        order: '$orderList1'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'Meals',
+                        localField: 'order.mid',
+                        foreignField: 'mid',
+                        as: 'order.mealList'
+                    }
+                },
+                {
+                    $addFields: {
+                        'order.meal': {
+                            $ifNull: [{
+                                $arrayElemAt: ['$order.mealList', 0]
+                            }, {}]
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        receptionistInfo: 0,
+                        lastSellerList: 0,
+                        lastSellerInfo: 0,
+                        sellerInfo: 0,
+                        from_doc: 0,
+                        __v: 0,
+                        _id: 0
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$cid',
+                        orderList: {
+                            $push: {
+                                $cond: {
+                                    if: '$order',
+                                    then: '$order',
+                                    else: null
+
+                                }
+                            }
+                        },
+                        ...groupActions
+                    }
+                }, {
+                    $addFields: {
+                        filterOrderList: {
+                            $filter: {
+                                input: '$orderList',
+                                as: 'aorder',
+                                cond: {
+                                    $toBool: '$$aorder.oid'
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        orderList: 0,
+                        _id: 0
+                    }
                 }
-            ]).sort({
-                'status_doc.order': 1, //根据状态排序
-                _id: 1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
+            ]).sort("-receptTime").skip((Number(pageNo) - 1) * Number(pageSize))
             .limit(Number(pageSize))
         ]);
         res.json({
@@ -499,6 +359,7 @@ router.get('/sellerCustomList', async function (req, res, next) {
             }
         });
     } catch (error) {
+        console.log("*********************************", error);
         res.json({
             status: 500,
             message: "获取失败",
@@ -515,263 +376,22 @@ router.get('/sellerCustomList', async function (req, res, next) {
 });
 
 
-router.get('/orderedlist', async function (req, res, next) {
-
-    let {
-        pageNo,
-        pageSize,
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-    try {
-        let filteredConditions = generateConditions(filters, fuzzies);
-
-        if (filteredConditions.aftersale) {
-            filteredConditions.aftersale = Number(filteredConditions.aftersale);
-        }
-        if (filteredConditions.cid) {
-            filteredConditions.cid = Number(filteredConditions.cid);
-        }
-        let dealSatus = await customStatusModel.findOne({
-            name: '已成交'
-        });
-        filteredConditions.status == dealSatus.sid;
-        const [totalCount, list] = await Promise.all([
-            customModel.countDocuments(filteredConditions),
-            customModel.aggregate([{
-                    $match: filteredConditions
-                }, {
-                    $lookup: {
-                        from: 'Contracts',
-                        localField: 'cid',
-                        foreignField: 'cid',
-                        as: 'contractList'
-                    },
-
-                },
-                {
-                    $lookup: {
-                        from: 'Meals',
-                        localField: 'contractList.mid',
-                        foreignField: 'mid',
-                        as: 'contractList.mealInfo'
-                    },
-                },
-                {
-                    $unwind: '$contractList.mealInfo'
-                },
-                {
-                    $group: {
-                        _id: '$cid',
-                        cid: {
-                            $first: "$cid"
-                        },
-                        name: {
-                            $first: "$name"
-                        },
-                        orderList: {
-                            $push: '$orderList'
-                        },
-                        city: {
-                            $first: "$city"
-                        },
-                        county: {
-                            $first: "$county"
-                        },
-                        dealTime: {
-                            $first: "$dealTime"
-                        },
-                        allocTime: {
-                            $first: "$allocTime"
-                        },
-                        followList: {
-                            $first: "$followList"
-                        },
-                        from: {
-                            $first: "$from"
-                        },
-                        fromZn: {
-                            $first: "$fromZn"
-                        },
-                        keywords: {
-                            $first: "$keywords"
-                        },
-                        name: {
-                            $first: "$name"
-                        },
-                        phone: {
-                            $first: "$phone"
-                        },
-                        province: {
-                            $first: "$province"
-                        },
-                        qq: {
-                            $first: "$qq"
-                        },
-                        wx: {
-                            $first: "$wx"
-                        },
-                        receptionist: {
-                            $first: "$receptionist"
-                        },
-                        receptionistName: {
-                            $first: "$receptionistName"
-                        },
-                        receptionistremark: {
-                            $first: "$receptionistremark"
-                        },
-                        seller: {
-                            $first: "$seller"
-                        },
-                        sellerName: {
-                            $first: "$sellerName"
-                        },
-                        aftersale: {
-                            $first: "$aftersale"
-                        },
-                        aftersaleName: {
-                            $first: "$aftersaleName"
-                        },
-                        status: {
-                            $first: "$status"
-                        },
-                        statusColor: {
-                            $first: "$statusColor"
-                        },
-                        statusZn: {
-                            $first: "$statusZn"
-                        },
-                        updateTime: {
-                            $first: "$updateTime"
-                        }
-                    }
-                }
-            ]).sort({
-                'status_doc.order': 1,
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        console.log(totalCount, list);
-        if (true) {
-            //totalCount && Array.isArray(list) && list.length > 0
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
-                }
-            });
-        }
-    } catch (error) {
-        console.log(error);
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-
-router.get('/aftersalelist', async function (req, res, next) {
-
-    let {
-        pageNo,
-        pageSize,
-        userid,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-    try {
-        let filteredConditions = generateConditions(filters, fuzzies);
-
-        if (filteredConditions.aftersale) {
-            filteredConditions.aftersale = Number(filteredConditions.aftersale);
-        }
-        if (filteredConditions.cid) {
-            filteredConditions.cid = Number(filteredConditions.cid);
-        }
-        filteredConditions.statusZn = '已成交';
-        console.log('filteredConditions', filteredConditions);
-        const [totalCount, list] = await Promise.all([
-            customModel.countDocuments(filteredConditions),
-            customModel.aggregate([{
-                    $lookup: {
-                        from: 'Aftersales',
-                        localField: 'cid',
-                        foreignField: 'cid',
-                        as: 'aftersales'
-                    },
-
-                },
-                {
-                    $match: filteredConditions
-                },
-
-            ]).sort({
-                'aftersales.createTime': 1,
-                _id: -1
-            }).skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        console.log(totalCount, list);
-        if (true) {
-            //totalCount && Array.isArray(list) && list.length > 0
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
-                }
-            });
-        }
-    } catch (error) {
-        console.log(error);
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-
+//更新客户(可批量)
 router.put("/update", async function (req, res, next) {
     const {
-        cid,
+        cids,
         ...payload
     } = req.body;
     try {
-        let updateSuccess = await customModel.updateOne({
-            cid
+        let updateSuccess = await customModel.updateMany({
+            cid: {
+                $in: cids
+            }
         }, {
-            $set: payload
+            $set: {
+                ...payload,
+                updateTime: Date.now()
+            }
         });
 
         if (updateSuccess) {
@@ -789,10 +409,9 @@ router.put("/update", async function (req, res, next) {
     }
 });
 
-//用户登出
+//删除客户(可批量)
 router.delete("/delete", async function (req, res, next) {
     try {
-        console.log('req.body.cids', req.body.cids);
         let result = await customModel.deleteMany({
             cid: {
                 $in: req.body.cids

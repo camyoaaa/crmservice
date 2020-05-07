@@ -37,7 +37,6 @@ router.get("/list", async function (req, res, next) {
     let {
         pageNo,
         pageSize,
-        userid,
         fuzzies, //模糊查询字段数组
         ...filters
     } = req.query;

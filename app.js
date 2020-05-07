@@ -6,18 +6,23 @@ var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 
 var DBStart = require("./models"); //启动数据库
+const MySchedule = require("./schedule/updateStaffAlloc"); //启动定时任务
+DBStart.then(() => {
+  MySchedule();
+});
 
 var headerControlMiddleware = require("./midwares/header"); //响应头统一控制
 var authMiddleware = require("./midwares/auth"); //token认证
+var contextDefineMiddleware = require("./midwares/context"); //响应头统一控制
 
 var indexRouter = require("./routes/index");
+var systemRouter = require("./routes/system");
 var usersRouter = require("./routes/users");
 var staffRouter = require("./routes/staffmanage");
 var mealRouter = require("./routes/meal");
 var businessRouter = require("./routes/business");
 var customfromRouter = require("./routes/customfrom");
 var customstatusRouter = require("./routes/customstatus");
-
 
 var departmentRouter = require("./routes/department");
 var postRouter = require("./routes/post");
@@ -28,12 +33,15 @@ var customRouter = require("./routes/custom");
 var followRecordRouter = require("./routes/followrecord");
 var aftersaleRouter = require("./routes/aftersale");
 var payreceiptRouter = require("./routes/payreceipt");
-
+var dashboardRouter = require("./routes/dashboard");
+var messageRouter = require("./routes/message");
 
 var app = express();
 
 //使用中间件
+// app.use(express.static(path.join(__dirname, "public")));
 app.use(headerControlMiddleware); //响应header控制
+app.use(contextDefineMiddleware); //添加上下文
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
@@ -43,7 +51,7 @@ app.use(logger("dev"));
 app.use(express.json());
 app.use(
   express.urlencoded({
-    extended: false
+    extended: false,
   })
 );
 app.use(cookieParser());
@@ -53,6 +61,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use(authMiddleware); //启用token认证
 
 app.use("/", indexRouter);
+app.use("/system", systemRouter);
 app.use("/auth", usersRouter);
 app.use("/staff", staffRouter);
 app.use("/meal", mealRouter);
@@ -69,7 +78,8 @@ app.use("/aftersale", aftersaleRouter);
 
 app.use("/custom", customRouter);
 app.use("/payreceipt", payreceiptRouter);
-
+app.use("/dashboard", dashboardRouter);
+app.use("/message", messageRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

@@ -21,8 +21,7 @@ const UserschemaDefine = {
         require: true
     },
     reviewer: { //审核人
-        type: Number,
-        require: true
+        type: Number
     },
     createTime: { //合同录入时间
         type: Number,

@@ -48,6 +48,10 @@ const UserschemaDefine = {
         type: Number,
         default: 1
     },
+    totalActivity: { //总活动次数
+        type: Number,
+        default: 0
+    },
     activityStep: { //第几次活动
         type: Number,
         default: 0
@@ -65,8 +69,7 @@ const UserschemaDefine = {
         default: 2
     },
     endTime: {
-        type: Number,
-        default: Date.now
+        type: Number
     }
 };
 
