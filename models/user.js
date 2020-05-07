@@ -4,6 +4,7 @@ const CollectionName = "Users";
 const autoIncrement = require("mongoose-auto-increment");
 
 const address = require('address');
+const {appRoleList} = require('../config');
 const {
     APP_HOST,
     APP_PORT
@@ -50,9 +51,9 @@ const UserschemaDefine = {
         type: String,
         default: ''
     },
-    status: { //员工状态 1工作中,2未工作
+    status: { //员工状态 1暂停业务,2正在工作
         type: Number,
-        default: 2
+        default: 1
     },
     daily: { //日常任务量
         type: Number,
@@ -88,4 +89,17 @@ UserSchema.plugin(autoIncrement.plugin, {
     startAt: 100000,
     incrementBy: 1
 });
-module.exports = mongoose.model(CollectionName, UserSchema, CollectionName);
+let userModel = mongoose.model(CollectionName, UserSchema, CollectionName);
+
+userModel.findOne({name:'admin'}).then((doc,err)=>{
+    if(!doc){
+        userModel.create({
+            name:'admin',
+            password:'admin',
+            role:appRoleList.find(r=>r.name === '管理员').id
+        }).then(_=>{});
+    }
+});
+
+
+module.exports = userModel
