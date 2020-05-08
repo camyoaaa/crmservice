@@ -7,8 +7,16 @@
 var app = require("../app");
 var debug = require("debug")("crmservice:server");
 var http = require("http");
+var https = require('https');
+var fs = require('fs');
+var path = require('path');
 var socketManager = require('../socketManger');
 
+var options = {
+
+  key: fs.readFileSync(path.join(__dirname, '../httpsCA/server.key')),
+  cert: fs.readFileSync(path.join(__dirname, '../httpsCA/server.crt'))
+}
 /**
  * Get port from environment and store in Express.
  */
@@ -19,7 +27,9 @@ app.set("port", port);
 /**
  * Create HTTP server.
  */
-var server = http.createServer(app);
+// var server = http.createServer(app);
+var server = https.createServer(options, app);
+
 /**
  * Create Websockct server.
  */

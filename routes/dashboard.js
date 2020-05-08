@@ -225,7 +225,10 @@ router.get('/customData', async (req, res) => {
                 }
             }
         ]);
-        res.isuccess(result[0]);
+        res.isuccess(result[0] || {
+            totalNumber: 0,
+            dealNumber: 0
+        });
     } catch (error) {
         res.ierror(error);
     }
