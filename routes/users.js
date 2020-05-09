@@ -158,7 +158,7 @@ let arras = [{
 ];
 // permissionModel.create({
 //     belong: 'customManage',
-//     label: '新增员工',
+//     label: '直改状态',
 //     value: 'changestatus'
 // }, function (doc) {
 //     console.log(doc, 'xxxxxxxxxxxxxxxxx');

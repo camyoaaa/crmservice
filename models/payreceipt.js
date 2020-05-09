@@ -27,7 +27,7 @@ const UserschemaDefine = {
         require: true
     },
     account: {
-        type: Number, //收款账号
+        type: String, //收款账号
         require: true
     },
     money: {

@@ -132,7 +132,7 @@ router.get("/list", async function (req, res) {
     } = req.query;
     try {
         let filteredConditions = generateConditions(filters, fuzzies, {
-            toNumber: ["creator", "reviewer", "payreceiptid", "status", "orderid", "customid", "way", "account"],
+            toNumber: ["creator", "reviewer", "payreceiptid", "status", "orderid", "customid", "way"],
         });
         if (startTime && endTime) {
             //传入了时间
