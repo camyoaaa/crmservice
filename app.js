@@ -11,7 +11,10 @@ DBStart.then(() => {
   MySchedule();
 });
 
-var headerControlMiddleware = require("./midwares/header"); //响应头统一控制
+var {
+  API_HEADER,
+  CORS_HEAER
+} = require("./midwares/header"); //响应头统一控制
 var authMiddleware = require("./midwares/auth"); //token认证
 var contextDefineMiddleware = require("./midwares/context"); //响应头统一控制
 
@@ -53,12 +56,12 @@ app.use(
 );
 app.use(cookieParser());
 app.use(bodyParser.json()); //使用请求体解析中间件
+app.use(CORS_HEAER); //响应header控制
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use(authMiddleware); //启用token认证
 //使用中间件
-// app.use(express.static(path.join(__dirname, "public")));
-app.use(headerControlMiddleware); //响应header控制
+app.use(API_HEADER); //响应header控制
 app.use(contextDefineMiddleware); //添加上下文
 app.use("/", indexRouter);
 app.use("/system", systemRouter);

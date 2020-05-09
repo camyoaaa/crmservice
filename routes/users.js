@@ -25,8 +25,7 @@ const getClientIP = req => {
     return req.headers["x-real-ip"] ? req.headers["x-real-ip"] : req.ip.replace(/::ffff:/, "");
 };
 
-let arras = [
-    {
+let arras = [{
         belong: 'customManage',
         label: '查询/查看',
         value: 'search'
@@ -157,7 +156,11 @@ let arras = [
         value: 'add'
     },
 ];
-// permissionModel.create(...arras, function (doc) {
+// permissionModel.create({
+//     belong: 'customManage',
+//     label: '新增员工',
+//     value: 'changestatus'
+// }, function (doc) {
 //     console.log(doc, 'xxxxxxxxxxxxxxxxx');
 // });
 
@@ -190,13 +193,17 @@ router.post("/login", async function (req, res, next) {
         rememberMe
     } = req.body;
     try {
-        let condition = isNaN(Number(account)) ? {
-            name: account,
+        // let condition = isNaN(Number(account)) ? {
+        //     name: account,
+        //     password
+        // } : {
+        //     account,
+        //     password
+        // };
+        let condition = {
+            account: Number(account),
             password
-        } : {
-            account,
-            password
-        };
+        }
         console.log(condition);
 
         let WorkingStatus = staffStatusList.find(s => s.name === '正在工作').id;
