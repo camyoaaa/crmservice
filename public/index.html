@@ -1,94 +1,200 @@
-<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>webpack_crm</title><style>#loading-mask {
-      position: fixed;
-      left: 0;
-      top: 0;
-      height: 100%;
+<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>webpack_crm</title><style>* {
+      padding: 0;
+      margin: 0;
+      outline: 0;
+      border: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
       width: 100%;
-      background: #fff;
-      user-select: none;
-      z-index: 9999;
-      overflow: hidden
+      height: 100%;
+      overflow: hidden;
     }
 
-    .loading-wrapper {
+    body {
+      background: -webkit-linear-gradient(45deg, #6fc7b5 0%, #13bdce 20%, #0094d9 40%, #5a3694 60%, #ee4d74 80%, #f58c58 100%);
+      background: linear-gradient(45deg, #6fc7b5 0%, #13bdce 20%, #0094d9 40%, #5a3694 60%, #ee4d74 80%, #f58c58 100%);
+      background-size: 600%;
+      background-position: 0% 100%;
+      -webkit-animation: gradient 7.5s ease-in-out infinite;
+      animation: gradient 7.5s ease-in-out infinite;
       position: absolute;
-      top: 50%;
+      left: 0;
+    }
+
+    .loading {
+      width: 100%;
+      height: 100%;
+    }
+
+    .loading * {
+      position: fixed;
       left: 50%;
-      transform: translate(-50%, -100%)
+      top: 50%;
+      -webkit-transform: translate3d(-50%, -50%, 0) rotate(0deg);
+      transform: translate3d(-50%, -50%, 0) rotate(0deg);
     }
 
-    .loading-dot {
-      animation: antRotate 1.2s infinite linear;
-      transform: rotate(45deg);
-      position: relative;
+    .loading .logo {
+      background-image: url("./static/logo.png");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      width: 220px;
+      height: 60px;
+    }
+
+    .loading .dots.animate .dot {
+      -webkit-animation: loading-block 2.5s ease-in-out 1;
+      animation: loading-block 2.5s ease-in-out 1;
+    }
+
+    .loading .dots.animate .dot:after {
+      -webkit-animation: loading-dot 2.5s ease-in-out 1;
+      animation: loading-dot 2.5s ease-in-out 1;
+    }
+
+    .loading .dots .dot {
+      width: 300px;
+      height: 300px;
+    }
+
+    .loading .dots .dot:after {
+      content: "";
       display: inline-block;
-      font-size: 64px;
-      width: 64px;
-      height: 64px;
-      box-sizing: border-box
-    }
-
-    .loading-dot i {
-      width: 22px;
-      height: 22px;
+      width: 60px;
+      height: 60px;
+      background-color: #fff;
+      border-radius: 50%;
       position: absolute;
-      display: block;
-      background-color: #1890ff;
-      border-radius: 100%;
-      transform: scale(.75);
-      transform-origin: 50% 50%;
-      opacity: .3;
-      animation: antSpinMove 1s infinite linear alternate
+      -webkit-transform: scale(0.17);
+      transform: scale(0.17);
     }
 
-    .loading-dot i:nth-child(1) {
-      top: 0;
-      left: 0
+    .loading .dots .dot:nth-child(1) {
+      top: 119px;
+      left: -209px;
+      -webkit-animation-delay: 0s;
+      animation-delay: 0s;
     }
 
-    .loading-dot i:nth-child(2) {
+    .loading .dots .dot:nth-child(1):after {
+      -webkit-transform-origin: top right;
+      transform-origin: top right;
       top: 0;
       right: 0;
-      -webkit-animation-delay: .4s;
-      animation-delay: .4s
+      -webkit-animation-delay: 0s;
+      animation-delay: 0s;
     }
 
-    .loading-dot i:nth-child(3) {
-      right: 0;
+    .loading .dots .dot:nth-child(2) {
+      top: -161px;
+      left: -194px;
+      -webkit-animation-delay: 0.25s;
+      animation-delay: 0.25s;
+    }
+
+    .loading .dots .dot:nth-child(2):after {
+      -webkit-transform-origin: bottom right;
+      transform-origin: bottom right;
       bottom: 0;
-      -webkit-animation-delay: .8s;
-      animation-delay: .8s
+      right: 0;
+      -webkit-animation-delay: 0.25s;
+      animation-delay: 0.25s;
     }
 
-    .loading-dot i:nth-child(4) {
+    .loading .dots .dot:nth-child(3) {
+      top: -161px;
+      left: -101px;
+      -webkit-animation-delay: 0.5s;
+      animation-delay: 0.5s;
+    }
+
+    .loading .dots .dot:nth-child(3):after {
+      -webkit-transform-origin: bottom right;
+      transform-origin: bottom right;
+      bottom: 0;
+      right: 0;
+      -webkit-animation-delay: 0.5s;
+      animation-delay: 0.5s;
+    }
+
+    .loading .dots .dot:nth-child(4) {
+      top: 116px;
+      left: 200px;
+      -webkit-animation-delay: 0.75s;
+      animation-delay: 0.75s;
+    }
+
+    .loading .dots .dot:nth-child(4):after {
+      -webkit-transform-origin: top left;
+      transform-origin: top left;
+      top: 0;
+      left: 0;
+      -webkit-animation-delay: 0.75s;
+      animation-delay: 0.75s;
+    }
+
+    .loading .dots .dot:nth-child(5) {
+      top: -161px;
+      left: 214px;
+      -webkit-animation-delay: 1s;
+      animation-delay: 1s;
+    }
+
+    .loading .dots .dot:nth-child(5):after {
+      -webkit-transform-origin: bottom left;
+      transform-origin: bottom left;
       bottom: 0;
       left: 0;
-      -webkit-animation-delay: 1.2s;
-      animation-delay: 1.2s
+      -webkit-animation-delay: 1s;
+      animation-delay: 1s;
     }
 
-    @keyframes antRotate {
-      to {
-        -webkit-transform: rotate(405deg);
-        transform: rotate(405deg)
+    @-webkit-keyframes loading-block {
+      100% {
+        -webkit-transform: translate3d(-50%, -50%, 0) rotate(360deg);
+        transform: translate3d(-50%, -50%, 0) rotate(360deg);
       }
     }
 
-    @-webkit-keyframes antRotate {
-      to {
-        -webkit-transform: rotate(405deg);
-        transform: rotate(405deg)
+    @keyframes loading-block {
+      100% {
+        -webkit-transform: translate3d(-50%, -50%, 0) rotate(360deg);
+        transform: translate3d(-50%, -50%, 0) rotate(360deg);
       }
     }
 
-    @keyframes antSpinMove {
-      to {
-        opacity: 1
+    @-webkit-keyframes loading-dot {
+      50% {
+        -webkit-transform: scale(1);
+        transform: scale(1);
       }
     }
 
-    @-webkit-keyframes antSpinMove {
-      to {
-        opacity: 1
+    @keyframes loading-dot {
+      50% {
+        -webkit-transform: scale(1);
+        transform: scale(1);
       }
-    }</style><link href=/static/css/app.9770455fc0cbae8b5f0b328bbd57926c.css rel=stylesheet></head><body><div id=app><div id=loading-mask><div class=loading-wrapper><span class="loading-dot loading-dot-spin"><i></i><i></i><i></i><i></i></span></div></div></div><script type=text/javascript src=/static/js/manifest.54a62fcf6114b3d5aeb6.js></script><script type=text/javascript src=/static/js/vendor.d8068fba8185527bb45d.js></script><script type=text/javascript src=/static/js/app.e69db38093c509c6e347.js></script></body></html>
+    }
+
+    @-webkit-keyframes gradient {
+      50% {
+        background-position: 100% 0%;
+      }
+    }
+
+    @keyframes gradient {
+      50% {
+        background-position: 100% 0%;
+      }
+    }</style><link href=/static/css/main.88f4e32d5294037dbfc666116f137267.css rel=stylesheet></head><body><div id=app><div class=loading><div class=logo></div><div class="dots animate"><div class=dot></div><div class=dot></div><div class=dot></div><div class=dot></div><div class=dot></div></div></div><script>setInterval(function () {
+        let dot0 = document.querySelectorAll(".dots")[0];
+        dot0 && dot0.classList && dot0.classList.remove('animate');
+        setTimeout(function () {
+          dot0 && dot0.classList && dot0.classList.add('animate');
+        }, 200);
+      }, 3750);</script><script src=https://cdn.bootcss.com/babel-polyfill/6.23.0/polyfill.min.js></script><script src=https://cdn.bootcdn.net/ajax/libs/babel-polyfill/7.8.7/polyfill.min.js></script></div><script type=text/javascript src=/static/js/manifest.ca5b209338105eba962d.js></script><script type=text/javascript src=/static/js/vendor.541ad80a6842e45c9274.js></script><script type=text/javascript src=/static/js/main.9e3e45946483476e605a.js></script></body></html>

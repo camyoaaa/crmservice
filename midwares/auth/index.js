@@ -6,10 +6,27 @@ const noAuthUrls = [
     '/auth/regist',
     '/auth/isRegist',
     '/auth/captcha',
-    '/department/tree'
+    '/department/tree',
+    '/workplace',
+    '/customManage',
+    '/orderManage',
+    'receiptManage',
+    '/contractManage',
+    '/aftersaleManage',
+    '/mealManage',
+    '/staffManage',
+    '/systemSettings',
+    '/usercenter',
+    '/usercenter/base',
+    '/usercenter/notify',
+    '/customDetail',
+    '/orderDetail',
+    '/customFollow',
+    '/orderFollow',
+    '/auth'
 ];
 const auth = function (req, res, next) {
-    if (!noAuthUrls.includes(req.url)) {
+    if (!noAuthUrls.includes(req._parsedUrl.pathname)) {
         let token = req.headers.authorization;
         let verifyToken = new Jwt(token).verifyToken();
         if (!verifyToken) { //如果验证token不通过

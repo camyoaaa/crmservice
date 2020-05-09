@@ -83,7 +83,12 @@ app.use("/message", messageRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
-  next(createError(404));
+  // next(createError(404));
+  // res.render('./public/index.html', function (err, html) {
+  //   res.send(html)
+  // })
+  // res.sendfile('./public/index.html');
+  res.redirect(`/`);
 });
 
 // error handler

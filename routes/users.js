@@ -15,6 +15,12 @@ const {
     staffStatusList
 } = require('../config');
 
+
+const {
+    APP_HOST,
+    APP_PORT
+} = require('../systemConfig');
+
 const getClientIP = req => {
     return req.headers["x-real-ip"] ? req.headers["x-real-ip"] : req.ip.replace(/::ffff:/, "");
 };
@@ -209,13 +215,13 @@ router.post("/login", async function (req, res, next) {
             let userToken = new Jwt(userid).generateToken(rememberMe ? 60 * 60 * 24 * 7 : undefined); //如果用户选择了记住账号密码,token有效期7天,否则1天
             res.header("Authorization", userToken);
 
-            res.systemSocket().sendMessage({
-                broadcast: true,
-                socketBody: {
-                    message: '系统通知',
-                    description: `【${userInfo.name}】已上线`
-                }
-            });
+            // res.systemSocket().sendMessage({
+            //     broadcast: true,
+            //     socketBody: {
+            //         message: '系统通知',
+            //         description: `【${userInfo.name}】已上线`
+            //     }
+            // });
 
             res.json({
                 status: 200,
@@ -256,13 +262,13 @@ router.post("/logout", async function (req, res, next) {
             ...userInfo
         } = logoutresult._doc || {}
         if (_id) {
-            res.systemSocket().sendMessage({
-                broadcast: true,
-                socketBody: {
-                    message: '系统通知',
-                    description: `【${userInfo.name}】已下线`
-                }
-            });
+            // res.systemSocket().sendMessage({
+            //     broadcast: true,
+            //     socketBody: {
+            //         message: '系统通知',
+            //         description: `【${userInfo.name}】已下线`
+            //     }
+            // });
             res.json({
                 status: 200,
                 msg: "注销成功",
@@ -323,7 +329,7 @@ router.post("/avatar", async function (req, res, next) {
             fs.rename(oldPath, newPath, async function () {
                 let paths = newPath.split("\\");
                 let publicpath = paths[paths.length - 1];
-                let finalpath = `http://${address.ip()}:3000/images/avatar/${publicpath}`;
+                let finalpath = `http://${APP_HOST}:${APP_PORT}/images/avatar/${publicpath}`;
                 let result = await userModel.updateOne({
                     account: req.userid
                 }, {
@@ -397,13 +403,13 @@ router.put("/modinfo", async function (req, res, next) {
         if (payload.status && payload.status !== prevStatus) {
             let WorkingStatus = staffStatusList.find(r => r.name === '正在工作').id;
 
-            res.systemSocket().sendMessage({
-                broadcast: true,
-                socketBody: {
-                    message: '系统通知',
-                    description: `【${name}】已${payload.status === WorkingStatus?'上':'下'}线`,
-                }
-            });
+            // res.systemSocket().sendMessage({
+            //     broadcast: true,
+            //     socketBody: {
+            //         message: '系统通知',
+            //         description: `【${name}】已${payload.status === WorkingStatus?'上':'下'}线`,
+            //     }
+            // });
         }
         res.json({
             status: 200,
