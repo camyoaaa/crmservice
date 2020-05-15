@@ -169,32 +169,48 @@ router.get('/list', async function (req, res, next) {
                         from: 'Customfroms',
                         localField: 'from',
                         foreignField: 'oid',
-                        as: 'from_doc'
+                        as: 'fromList'
                     },
                 },
                 {
-                    $unwind: '$from_doc'
+                    $addFields: {
+                        fromInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$fromList', 0]
+                            }, {}]
+                        }
+                    },
                 },
                 {
                     $addFields: {
-                        fromZn: '$from_doc.name'
-                    }
+                        fromZn: {
+                            $ifNull: ['$fromInfo.name', '']
+                        }
+                    },
                 },
                 { //关联接待人员
                     $lookup: {
                         from: 'Users',
                         localField: 'receptionist',
                         foreignField: 'account',
-                        as: 'receptionistInfo'
+                        as: 'receptionistList'
                     },
                 },
                 {
-                    $unwind: '$receptionistInfo'
+                    $addFields: {
+                        receptionistInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$receptionistList', 0]
+                            }, {}]
+                        }
+                    },
                 },
                 {
                     $addFields: {
-                        receptionistName: '$receptionistInfo.name'
-                    }
+                        receptionistName: {
+                            $ifNull: ['$receptionistInfo.name', '']
+                        }
+                    },
                 },
                 { //关联上一销售人员(销售)
                     $lookup: {
@@ -300,11 +316,13 @@ router.get('/list', async function (req, res, next) {
                 },
                 {
                     $project: {
+                        receptionistList: 0,
                         receptionistInfo: 0,
                         lastSellerList: 0,
                         lastSellerInfo: 0,
                         sellerInfo: 0,
-                        from_doc: 0,
+                        fromList: 0,
+                        fromInfo: 0,
                         __v: 0,
                         _id: 0
                     }

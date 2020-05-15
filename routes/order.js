@@ -39,37 +39,57 @@ router.get("/detail", async function (req, res, next) {
                     from: 'Users',
                     localField: 'creator',
                     foreignField: 'account',
-                    as: 'creatorInfo'
+                    as: 'creatorList'
                 }
             },
             {
-                $unwind: '$creatorInfo'
+                $addFields: {
+                    creatorInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$creatorList', 0]
+                        }, {}]
+                    }
+                },
             },
             { //关联用户信息
                 $lookup: {
                     from: 'Customs',
                     localField: 'cid',
                     foreignField: 'cid',
-                    as: 'customInfo'
+                    as: 'customList'
                 }
             },
             {
-                $unwind: '$customInfo'
+                $addFields: {
+                    customInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$customList', 0]
+                        }, {}]
+                    }
+                },
             },
             { //关联客户来源
                 $lookup: {
                     from: 'Customfroms',
                     localField: 'customInfo.from',
                     foreignField: 'oid',
-                    as: 'customInfo.fromZnList'
+                    as: 'customInfo.fromList'
                 }
             },
             {
-                $unwind: '$customInfo.fromZnList'
+                $addFields: {
+                    "customInfo.fromInfo": {
+                        $ifNull: [{
+                            $arrayElemAt: ['$customInfo.fromList', 0]
+                        }, {}]
+                    }
+                },
             },
             {
                 $addFields: {
-                    'customInfo.fromZn': '$customInfo.fromZnList.name'
+                    'customInfo.fromZn': {
+                        $ifNull: ['$customInfo.fromInfo.name', '']
+                    }
                 }
             },
             { //关联套餐信息
@@ -77,22 +97,34 @@ router.get("/detail", async function (req, res, next) {
                     from: 'Meals',
                     localField: 'mid',
                     foreignField: 'mid',
-                    as: 'mealInfo'
+                    as: 'mealList'
                 }
             },
             {
-                $unwind: '$mealInfo'
+                $addFields: {
+                    mealInfo: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$mealList', 0]
+                        }, {}]
+                    }
+                },
             },
             { //关联售后信息
                 $lookup: {
                     from: 'Aftersales',
                     localField: 'oid',
                     foreignField: 'orderid',
-                    as: 'aftersales'
+                    as: 'aftersalesList'
                 }
             },
             {
-                $unwind: '$aftersales'
+                $addFields: {
+                    aftersales: {
+                        $ifNull: [{
+                            $arrayElemAt: ['$aftersalesList', 0]
+                        }, {}]
+                    }
+                },
             },
             { //关联收据信息
                 $lookup: {
@@ -309,11 +341,17 @@ router.get("/list", async function (req, res, next) {
                         from: 'Users',
                         localField: 'creator',
                         foreignField: 'account',
-                        as: 'creatorInfo'
+                        as: 'creatorList'
                     }
                 },
                 {
-                    $unwind: '$creatorInfo'
+                    $addFields: {
+                        createInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$creatorList', 0]
+                            }, {}]
+                        }
+                    }
                 },
                 {
                     $addFields: {
@@ -394,6 +432,7 @@ router.get("/list", async function (req, res, next) {
                 },
                 {
                     $project: {
+                        creatorList: 0,
                         creatorInfo: 0,
                         mealList: 0,
                         mealInfo: 0,
@@ -413,124 +452,6 @@ router.get("/list", async function (req, res, next) {
 
             ]).sort({
                 createTime: -1
-            })
-            .skip((Number(pageNo) - 1) * Number(pageSize))
-            .limit(Number(pageSize))
-        ]);
-        if (Array.isArray(list)) {
-            res.json({
-                status: 200,
-                message: "获取成功",
-                timestamp: Date.now(),
-                result: {
-                    pageNo: Number(pageNo),
-                    pageSize: Number(pageSize),
-                    totalCount,
-                    totalPage: Math.ceil(totalCount / pageSize),
-                    data: list
-                }
-            });
-        }
-    } catch (error) {
-        console.log('error*********************************', error);
-        res.json({
-            status: 500,
-            message: "获取失败",
-            timestamp: Date.now(),
-            result: {
-                pageNo,
-                pageSize,
-                totalCount: 0,
-                totalPage: 0,
-                data: []
-            }
-        });
-    }
-});
-
-
-//获取支付审核通过的订单
-router.get('/paidPassedOrderList', async function (req, res) {
-    let {
-        pageNo,
-        pageSize,
-        fuzzies, //模糊查询字段数组
-        ...filters
-    } = req.query;
-    try {
-        let filteredConditions = generateConditions({
-            ...filters
-        }, fuzzies, {
-            toNumber: ['cid', 'oid', 'distributor', 'executor']
-        });
-        const [totalCount, list] = await Promise.all([
-            neworderModel.countDocuments(filteredConditions),
-            neworderModel.aggregate([{
-                    $match: filteredConditions,
-                }, {
-                    $lookup: {
-                        from: 'Customs',
-                        localField: 'cid',
-                        foreignField: 'cid',
-                        as: 'customInfo'
-                    }
-                },
-                {
-                    $unwind: '$customInfo'
-                },
-                {
-                    $lookup: {
-                        from: 'Meals',
-                        localField: 'mid',
-                        foreignField: 'mid',
-                        as: 'mealInfo'
-                    }
-                },
-                {
-                    $unwind: '$mealInfo'
-                },
-                {
-                    $lookup: {
-                        from: 'Users',
-                        localField: 'distributor',
-                        foreignField: 'account',
-                        as: 'distributorInfo'
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'Users',
-                        localField: 'executor',
-                        foreignField: 'account',
-                        as: 'executorInfo'
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'Newcontracts',
-                        localField: 'oid',
-                        foreignField: 'orderid',
-                        as: 'contractList'
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'Payreceipts',
-                        localField: 'oid',
-                        foreignField: 'orderid',
-                        as: 'payreceiptList'
-                    }
-                },
-                {
-                    $lookup: {
-                        from: 'Followrecords',
-                        localField: 'oid',
-                        foreignField: 'oid',
-                        as: 'followList'
-                    }
-                },
-            ]).sort({
-                _id: -1
             })
             .skip((Number(pageNo) - 1) * Number(pageSize))
             .limit(Number(pageSize))

@@ -188,15 +188,25 @@ router.get("/list", async function (req, res) {
                         from: "Users",
                         localField: "creator",
                         foreignField: "account",
-                        as: "creatorInfo",
+                        as: "creatorList",
                     },
                 },
                 {
-                    $unwind: "$creatorInfo",
+                    $addFields: {
+                        creatorInfo: {
+                            $ifNull: [{
+                                    $arrayElemAt: ["$creatorList", 0]
+                                },
+                                {}
+                            ],
+                        },
+                    },
                 },
                 {
                     $addFields: {
-                        creatorName: "$creatorInfo.name",
+                        creatorName: {
+                            $ifNull: ["$creatorInfo.name", ""]
+                        },
                     },
                 },
                 {
@@ -228,6 +238,7 @@ router.get("/list", async function (req, res) {
                 },
                 {
                     $project: {
+                        creatorList: 0,
                         creatorInfo: 0,
                         customList: 0,
                         customInfo: 0,

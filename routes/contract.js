@@ -203,16 +203,24 @@ router.get("/list", async function (req, res, next) {
                         from: 'Users',
                         localField: 'creator',
                         foreignField: 'account',
-                        as: 'creatorInfo'
+                        as: 'creatorList'
                     }
-                },
-                {
-                    $unwind: '$creatorInfo'
                 },
                 {
                     $addFields: {
-                        creatorName: '$creatorInfo.name'
-                    }
+                        creatorInfo: {
+                            $ifNull: [{
+                                $arrayElemAt: ['$creatorList', 0]
+                            }, {}]
+                        }
+                    },
+                },
+                {
+                    $addFields: {
+                        creatorName: {
+                            $ifNull: ['$creatorInfo.name', '']
+                        }
+                    },
                 },
                 { //关联审核人
                     $lookup: {
@@ -240,6 +248,7 @@ router.get("/list", async function (req, res, next) {
                 },
                 {
                     $project: {
+                        creatorList: 0,
                         creatorInfo: 0,
                         reviewerList: 0,
                         reviewerInfo: 0,
