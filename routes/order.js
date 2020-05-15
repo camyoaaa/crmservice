@@ -56,6 +56,22 @@ router.get("/detail", async function (req, res, next) {
             {
                 $unwind: '$customInfo'
             },
+            { //关联客户来源
+                $lookup: {
+                    from: 'Customfroms',
+                    localField: 'customInfo.from',
+                    foreignField: 'oid',
+                    as: 'customInfo.fromZnList'
+                }
+            },
+            {
+                $unwind: '$customInfo.fromZnList'
+            },
+            {
+                $addFields: {
+                    'customInfo.fromZn': '$customInfo.fromZnList.name'
+                }
+            },
             { //关联套餐信息
                 $lookup: {
                     from: 'Meals',

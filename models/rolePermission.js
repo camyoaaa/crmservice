@@ -35,12 +35,22 @@ const UserschemaDefine = {
     staffManage: {
         type: Array,
         default: []
-    },
+    }
 };
 
 const UserSchema = new MongooseSchema(UserschemaDefine);
 
 let myModel = mongoose.model(CollectionName, UserSchema, CollectionName);
+
+// myModel.find({}).then((docs,err)=>{
+//     if(docs.length === 0){
+//         myModel.create([
+//             {roleEn:''}
+//         ],_=>{});
+//     }
+// });
+
+
 
 module.exports = myModel;
 // module.exports = mongoose.model(CollectionName, UserSchema, CollectionName);

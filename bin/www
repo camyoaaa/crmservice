@@ -48,19 +48,6 @@ io.of("/user").on("connection", function (socket) {
   console.log(" a new userSocket coming");
   socketManager.addSocket(socket, 'user');
   global.userSocketIo[socket.handshake.query.userid] = socket;
-
-  console.log('socket.handshake.query.role', socket.handshake.query.role, typeof socket.handshake.query.role);
-  let timer = setTimeout(() => {
-    // console.log(`socket.to('seller')`, socket.to('seller'));
-
-    clearTimeout(timer)
-  }, 2000);
-  socket.join(socket.handshake.query.role, () => {
-    socket.to('xxxx').emit('message', {
-      message: '测试消息',
-      description: '测试消息'
-    });
-  });
 });
 
 /**
